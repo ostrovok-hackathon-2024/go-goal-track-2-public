@@ -1,0 +1,9 @@
+{
+  "iterations": 451,
+  "depth": 4,
+  "learning_rate": 0.2872930082560631,
+  "l2_leaf_reg": 0.43255698143104093,
+  "border_count": 69,
+  "verbose": 100,
+  "task_type": "CPU"
+}
