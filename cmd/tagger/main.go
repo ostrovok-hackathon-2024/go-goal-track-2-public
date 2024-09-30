@@ -1,269 +1,132 @@
 package main
 
 import (
-	"encoding/csv"
+	"encoding/json"
 	"fmt"
+	"math"
 	"os"
-	"regexp"
 	"strings"
-	"unicode"
 
-	"github.com/cdipaolo/goml/base"
-	"github.com/cdipaolo/goml/text"
+	cb "github.com/mirecl/catboost-cgo/catboost"
 )
 
-type RoomCharacteristics struct {
-	Class    string
-	Quality  string
-	Bathroom string
-	Bedding  string
-	Capacity string
-	Bedrooms string
-	Club     string
-	Balcony  string
-	View     string
-	Floor    string
+type TfIdfData struct {
+	Vocabulary map[string]int `json:"vocabulary"`
+	IdfValues  []float64      `json:"idf_values"`
 }
 
-type Classifier struct {
-	Class    *text.NaiveBayes
-	Quality  *text.NaiveBayes
-	Bathroom *text.NaiveBayes
-	View     *text.NaiveBayes
+func LoadTfIdfData(filePath string) (TfIdfData, error) {
+	data := TfIdfData{}
+	fileContent, err := os.ReadFile(filePath)
+	if err != nil {
+		return data, fmt.Errorf("failed to read TF-IDF file: %v", err)
+	}
+	err = json.Unmarshal(fileContent, &data)
+	if err != nil {
+		return data, fmt.Errorf("failed to unmarshal TF-IDF data: %v", err)
+	}
+	return data, nil
 }
 
-func preprocessText(input string) string {
-	lower := strings.ToLower(input)
-	cleaned := strings.Map(func(r rune) rune {
-		if unicode.IsLetter(r) || unicode.IsNumber(r) || r == ' ' || r == '-' {
-			return r
-		}
-		return ' '
-	}, lower)
-	return strings.Join(strings.Fields(cleaned), " ")
-}
-
-func trainClassifier(data [][]string, labelIndex int, labels []string) *text.NaiveBayes {
-	stream := make(chan base.TextDatapoint, 100)
-	classifier := text.NewNaiveBayes(stream, uint8(len(labels)), base.OnlyWordsAndNumbers)
-
-	go func() {
-		for _, row := range data {
-			if len(row) > labelIndex {
-				stream <- base.TextDatapoint{
-					X: preprocessText(row[0]),
-					Y: uint8(labelToInt(row[labelIndex], labels)),
-				}
-			}
-		}
-		close(stream)
-	}()
-
-	err := make(chan error)
-	classifier.OnlineLearn(err)
-	return classifier
-}
-
-func labelToInt(label string, labels []string) int {
-	for i, l := range labels {
-		if strings.ToLower(label) == l {
-			return i
+func TermFrequency(term string, document string) float64 {
+	words := strings.Fields(document)
+	termCount := 0
+	for _, word := range words {
+		if word == term {
+			termCount++
 		}
 	}
-	return 0
+	return float64(termCount) / float64(len(words))
 }
 
-func classifyRoom(classifier *Classifier, description string) RoomCharacteristics {
-	processed := preprocessText(description)
-
-	return RoomCharacteristics{
-		Class:    getLabel(classifier.Class.Predict(processed), classLabels),
-		Quality:  getLabel(classifier.Quality.Predict(processed), qualityLabels),
-		Bathroom: getLabel(classifier.Bathroom.Predict(processed), bathroomLabels),
-		Bedding:  inferBedding(description),
-		Capacity: inferCapacity(description),
-		Bedrooms: inferBedrooms(description),
-		Club:     inferClub(description),
-		Balcony:  inferBalcony(description),
-		View:     getLabel(classifier.View.Predict(processed), viewLabels),
-		Floor:    inferFloor(description),
+func CalculateTfIdfVector(rateName string, tfidfData TfIdfData) []float32 {
+	vector := make([]float32, len(tfidfData.Vocabulary))
+	for term, index := range tfidfData.Vocabulary {
+		tf := TermFrequency(term, rateName)
+		idf := tfidfData.IdfValues[index]
+		vector[index] = float32(tf * idf)
 	}
+	return vector
 }
 
-func getLabel(class uint8, labels []string) string {
-	if int(class) < len(labels) {
-		return labels[class]
+func LoadModelAndPredict(rateName string, modelPath string, tfidfData TfIdfData, labels []string) (string, error) {
+	model, err := cb.LoadFullModelFromFile(modelPath)
+
+	if err != nil {
+		return "", fmt.Errorf("failed to load model: %v", err)
 	}
-	return "undefined"
+
+	vector := CalculateTfIdfVector(rateName, tfidfData)
+	res, err := model.Predict([][]float32{vector}, [][]string{})
+
+	if err != nil {
+		return "", fmt.Errorf("failed to predict: %v", err)
+	}
+
+	predicted := labels[argmax(res)]
+
+	return predicted, nil
 }
 
-func inferBedding(description string) string {
-	lower := strings.ToLower(description)
-	if strings.Contains(lower, "bunk") {
-		return "bunk bed"
-	} else if strings.Contains(lower, "single") {
-		return "single bed"
-	} else if strings.Contains(lower, "double") || strings.Contains(lower, "twin") {
-		return "double/double-or-twin"
-	} else if strings.Contains(lower, "multiple") {
-		return "multiple"
+func LoadLabels(filePath string) ([]string, error) {
+	var labels []string
+
+	fileContent, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read labels file: %v", err)
 	}
-	return "undefined"
+
+	err = json.Unmarshal(fileContent, &labels)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal labels: %v", err)
+	}
+
+	return labels, nil
 }
 
-func inferCapacity(description string) string {
-	lower := strings.ToLower(description)
-	if strings.Contains(lower, "sextuple") {
-		return "sextuple"
-	} else if strings.Contains(lower, "quintuple") {
-		return "quintuple"
-	} else if strings.Contains(lower, "quadruple") || strings.Contains(lower, "quad") {
-		return "quadruple"
-	} else if strings.Contains(lower, "triple") {
-		return "triple"
-	} else if strings.Contains(lower, "double") {
-		return "double"
-	} else if strings.Contains(lower, "single") {
-		return "single"
-	}
-	return "undefined"
-}
-
-func inferBedrooms(description string) string {
-	re := regexp.MustCompile(`(\d+)\s*bedroom`)
-	match := re.FindStringSubmatch(strings.ToLower(description))
-	if len(match) > 1 {
-		return match[1] + " bedroom"
-	}
-	return "undefined"
-}
-
-func inferClub(description string) string {
-	if strings.Contains(strings.ToLower(description), "club") {
-		return "club"
-	}
-	return "not club"
-}
-
-func inferBalcony(description string) string {
-	if strings.Contains(strings.ToLower(description), "balcony") {
-		return "with balcony"
-	}
-	return "no balcony"
-}
-
-func inferFloor(description string) string {
-	lower := strings.ToLower(description)
-	if strings.Contains(lower, "penthouse") {
-		return "penthouse floor"
-	} else if strings.Contains(lower, "duplex") {
-		return "duplex floor"
-	} else if strings.Contains(lower, "basement") {
-		return "basement floor"
-	} else if strings.Contains(lower, "attic") {
-		return "attic floor"
-	}
-	return "undefined"
-}
-
-func postProcessCharacteristics(ch RoomCharacteristics) RoomCharacteristics {
-	if ch.Class == "suite" || ch.Class == "junior-suite" || ch.Class == "apartment" || ch.Class == "villa" {
-		ch.Bathroom = "private bathroom"
-	}
-	if ch.Capacity == "undefined" && ch.Bedding != "undefined" {
-		if ch.Bedding == "single bed" {
-			ch.Capacity = "single"
-		} else {
-			ch.Capacity = "double"
+func argmax(values []float64) int {
+	maxIndex := 0
+	maxValue := math.Inf(-1)
+	for i, v := range values {
+		if v > maxValue {
+			maxValue = v
+			maxIndex = i
 		}
 	}
-	if ch.Bedding == "undefined" && ch.Capacity != "undefined" {
-		if ch.Capacity == "single" {
-			ch.Bedding = "single bed"
-		} else {
-			ch.Bedding = "double/double-or-twin"
-		}
-	}
-	return ch
+	return maxIndex
 }
-
-var classLabels = []string{"undefined", "run-of-house", "dorm", "capsule", "room", "junior-suite", "suite", "apartment", "studio", "villa", "cottage", "bungalow", "chalet", "camping", "tent"}
-var qualityLabels = []string{"undefined", "economy", "standard", "comfort", "business", "superior", "deluxe", "premier", "executive", "presidential", "premium", "classic", "ambassador", "grand", "luxury", "platinum", "prestige", "privilege", "royal"}
-var bathroomLabels = []string{"undefined", "shared bathroom", "private bathroom", "external private bathroom"}
-var viewLabels = []string{"undefined", "bay view", "bosphorus view", "burj-khalifa view", "canal view", "city view", "courtyard view", "dubai-marina view", "garden view", "golf view", "harbour view", "inland view", "kremlin view", "lake view", "land view", "mountain view", "ocean view", "panoramic view", "park view", "partial-ocean view", "partial-sea view", "partial view", "pool view", "river view", "sea view", "sheikh-zayed view", "street view", "sunrise view", "sunset view", "water view", "with view", "beachfront", "ocean front", "sea front"}
 
 func main() {
-	trainingData, err := loadCSV("training_data.csv")
+	tfidfData, err := LoadTfIdfData("tfidf_data.json")
 	if err != nil {
-		fmt.Println("Error loading training data:", err)
+		fmt.Printf("Error loading TF-IDF data: %v\n", err)
 		return
 	}
 
-	classifier := &Classifier{
-		Class:    trainClassifier(trainingData, 1, classLabels),
-		Quality:  trainClassifier(trainingData, 2, qualityLabels),
-		Bathroom: trainClassifier(trainingData, 3, bathroomLabels),
-		View:     trainClassifier(trainingData, 9, viewLabels),
-	}
+	rateName := "deluxe triple room"
+	modelPath := "catboost_model_class.cbm"
+	classLabels, err := LoadLabels("class_labels.json")
 
-	inputFile := "input.csv"
-	outputFile := "output.csv"
-
-	input, err := os.Open(inputFile)
 	if err != nil {
-		fmt.Println("Error opening input file:", err)
+		fmt.Printf("Error loading class labels: %v\n", err)
 		return
 	}
-	defer input.Close()
 
-	output, err := os.Create(outputFile)
+	predictedClass, err := LoadModelAndPredict(rateName, modelPath, tfidfData, classLabels)
 	if err != nil {
-		fmt.Println("Error creating output file:", err)
+		fmt.Printf("Error predicting class: %v\n", err)
 		return
 	}
-	defer output.Close()
 
-	reader := csv.NewReader(input)
-	writer := csv.NewWriter(output)
-
-	writer.Write([]string{"rate_name", "class", "quality", "bathroom", "bedding", "capacity", "bedrooms", "club", "balcony", "view", "floor"})
-
-	for {
-		record, err := reader.Read()
-		if err != nil {
-			break
-		}
-
-		description := record[0]
-		characteristics := classifyRoom(classifier, description)
-		characteristics = postProcessCharacteristics(characteristics)
-
-		writer.Write([]string{
-			description,
-			characteristics.Class,
-			characteristics.Quality,
-			characteristics.Bathroom,
-			characteristics.Bedding,
-			characteristics.Capacity,
-			characteristics.Bedrooms,
-			characteristics.Club,
-			characteristics.Balcony,
-			characteristics.View,
-			characteristics.Floor,
-		})
+	results := map[string]string{
+		"class": predictedClass,
 	}
 
-	writer.Flush()
-	fmt.Println("Processing complete. Output written to", outputFile)
-}
-
-func loadCSV(filename string) ([][]string, error) {
-	file, err := os.Open(filename)
+	resultJSON, err := json.MarshalIndent(results, "", "  ")
 	if err != nil {
-		return nil, err
+		fmt.Printf("Error marshalling results: %v\n", err)
+		return
 	}
-	defer file.Close()
 
-	reader := csv.NewReader(file)
-	return reader.ReadAll()
+	fmt.Println(string(resultJSON))
 }

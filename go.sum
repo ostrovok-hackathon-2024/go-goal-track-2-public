@@ -2,6 +2,8 @@ github.com/cdipaolo/goml v0.0.0-20220715001353-00e0c845ae1c h1:uqJXOhayPfl/QruVB
 github.com/cdipaolo/goml v0.0.0-20220715001353-00e0c845ae1c/go.mod h1:Ue8jgVLdBDCtsh1laikvraXqXzKCyKiruCcCcaeNDFE=
 github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/mirecl/catboost-cgo v0.5.0 h1:0s79O9xvRagJJ24CBscvUVKhaAtDRaiMYjzni6yZHBg=
+github.com/mirecl/catboost-cgo v0.5.0/go.mod h1:j6qAARz1aIl5bsGV23MqgzxfjUebLBFuolQKH3b4mGE=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/stretchr/testify v1.7.0 h1:nwc3DEeHmmLAfoZucVR881uASk0Mfjw8xYJ99tb5CcY=
