@@ -1,7 +1,4 @@
-project_name: "Rate Name Classifier"
-port: 8000
-version: "0.1.0"
-models_dir: "../artifacts/models"
+models_dir: "artifacts/models"
 categories:
   - capacity
   - quality

@@ -1,18 +1,22 @@
-import time
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
 from .schemas import RateNameInput
-from ..models.registry import model_registry
+from shared.models.registry import ModelRegistry
+from shared.config.config import settings
 import pandas as pd
 from io import StringIO
 
 router = APIRouter()
 
+model_registry = ModelRegistry(settings.MODELS_DIR, settings.CATEGORIES)
+
 
 @router.post("/predict", response_model=list[dict[str, str]])
 async def predict_rate_names(input_data: RateNameInput):
     # Validate input_data.rate_names to ensure no NaN values
-    cleaned_rate_names = [name if isinstance(name, str) else "" for name in input_data.rate_names]
+    cleaned_rate_names = [
+        name if isinstance(name, str) else "" for name in input_data.rate_names
+    ]
 
     try:
         return model_registry.predict(cleaned_rate_names, input_data.categories)
@@ -32,7 +36,7 @@ async def predict_rate_names_csv(file: UploadFile = File(...)):
             )
 
         # Replace NaN in 'rate_name' with empty string
-        df['rate_name'] = df['rate_name'].fillna("")
+        df["rate_name"] = df["rate_name"].fillna("")
 
         rate_names = df["rate_name"].tolist()
 

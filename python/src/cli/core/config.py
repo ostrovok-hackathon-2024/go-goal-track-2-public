@@ -5,11 +5,8 @@ from typing import List
 
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = Field(default="Rate Name Classifier", alias="project_name")
-    VERSION: str = Field(default="0.1.0", alias="version")
     MODELS_DIR: str = Field(default="../artifacts/models", alias="models_dir")
     CATEGORIES: List[str] = Field(alias="categories")
-    PORT: int = Field(default=8000, alias="port")
 
     class Config:
         case_sensitive = False

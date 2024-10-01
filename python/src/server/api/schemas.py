@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional
-from ..core.config import settings
+from shared.config.config import settings
 
 
 class RateNameInput(BaseModel):
