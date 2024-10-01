@@ -41,10 +41,13 @@ class ModelRegistry:
 
         return [
             {
-                category: value.item() if isinstance(value, np.integer) else value
-                for category, value in zip(CATEGORIES, row)
+                "rate_name": rate_name,
+                **{
+                    category: value.item() if isinstance(value, np.integer) else value
+                    for category, value in zip(CATEGORIES, row)
+                }
             }
-            for row in zip(*results)
+            for rate_name, row in zip(rate_names, zip(*results))
         ]
 
 model_registry = ModelRegistry()
