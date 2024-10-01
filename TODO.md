@@ -21,3 +21,11 @@
 [ ] Option to load extra models and labels (default: load from /models and /lables)
 
 [ ] Benchmark with hyperfine
+
+[ ] Pre-post processing
+
+[ ] Обработка неполных данных
+
+[ ] Graceful degradation при ошибках
+
+[ ] Автоматический retry механизм
