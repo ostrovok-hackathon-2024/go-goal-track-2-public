@@ -1,31 +1,40 @@
-[ ] Stream processing
+[ N ] Stream processing (no need)
 
-[ ] Batch size definition
+[ N ] Batch size definition
 
-[ ] Config path
+[ Y ] Config path
 
-[ ] JSON\protobuf\csv\yaml\parquet
+[ Y ] JSON\csv\yaml\parquet
 
-[ ] In-file
+[ Y ] In-file
 
-[ ] Out-file
+[ Y ] Out-file
 
-[ ] Verbose
+[ Y ] Verbose
 
-[ ] Output file format
+[ Y ] Output file format
 
 [ ] API to learn on new data
 
-[ ] Interactive mode
+[ ] Interactive mode @KXRXH
 
-[ ] Option to load extra models and labels (default: load from /models and /lables)
+[ ] Reduce docker image size by removing unused files @KXRXH
 
-[ ] Benchmark with hyperfine
+[ ] Benchmark and test with pytest @KXRXH
 
-[ ] Pre-post processing
+[ ] Implement WebSockets @KXRXH
 
-[ ] Обработка неполных данных
+[ ] Implement Linter @KXRXH
 
-[ ] Graceful degradation при ошибках
+[ Y ] Option to load extra models and labels (default: load from /models and /lables)
+(implemented as config)
 
-[ ] Автоматический retry механизм
+[ Y ] Benchmark with hyperfine
+
+[ N ] Pre-post processing
+
+[ N ] Обработка неполных данных (????)
+
+[ Y ] Graceful degradation при ошибках
+
+[ Y ] Автоматический retry механизм
