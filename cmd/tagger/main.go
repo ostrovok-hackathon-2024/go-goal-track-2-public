@@ -10,11 +10,21 @@ import (
 	"strings"
 	"sync"
 	"unicode"
+	"unsafe"
 
-	cb "github.com/mirecl/catboost-cgo/catboost"
+	cb "github.com/go-goal/tagger/cmd/tagger/catboost"
+
 	"golang.org/x/text/transform"
 	"golang.org/x/text/unicode/norm"
 )
+
+/*
+#cgo LDFLAGS: -ldl
+#cgo CFLAGS: -O3 -g
+#include <dlfcn.h>
+#include "catboost/catboost_wrapper.h"
+*/
+import "C"
 
 const Eps float64 = 0.00000001
 
@@ -125,23 +135,18 @@ func LoadTfIdfData(filePath string) (TfIdfData, error) {
 	return data, nil
 }
 
-func LoadModelAndPredict(rateNames []string, modelPath string, tfidfData TfIdfData, labels []string) ([]string, error) {
+func LoadModelAndPredict(floatsC unsafe.Pointer, num int, modelPath string, tfidfData TfIdfData, labels []string) ([]string, error) {
 	model, err := cb.LoadFullModelFromFile(modelPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load model: %v", err)
 	}
 
-	vectors := make([][]float32, len(rateNames))
-	for i, rateName := range rateNames {
-		vectors[i] = CalculateTfIdfVector(rateName, tfidfData, 2, 0.95)
-	}
-
-	res, err := model.Predict(vectors, [][]string{})
+	res, err := model.Predict(floatsC, num)
 	if err != nil {
 		return nil, fmt.Errorf("failed to predict: %v", err)
 	}
 
-	predictions := make([]string, len(rateNames))
+	predictions := make([]string, num)
 
 	if len(labels) == 2 {
 		for i, logit := range res {
@@ -154,7 +159,7 @@ func LoadModelAndPredict(rateNames []string, modelPath string, tfidfData TfIdfDa
 		}
 	} else {
 		numClasses := len(labels)
-		for i := 0; i < len(rateNames); i++ {
+		for i := 0; i < num; i++ {
 			logits := res[i*numClasses : (i+1)*numClasses]
 			probs := softmax(logits)
 			predictions[i] = labels[argmax(probs)]
@@ -250,11 +255,19 @@ func main() {
 
 	results := map[string]map[string]string{}
 
-	rateNames := ReadRateNames("rates_dirty.csv")
+	rateNames := ReadRateNames("rates_clean.csv")
 	if err != nil {
 		fmt.Printf("Error loading rate names: %v\n", err)
 		return
 	}
+
+	floats := CalculateTfIdfVectors(rateNames, tfidfData, 2, 0.95)
+
+	floatsC := cb.MakeFloatArray2D(floats)
+	defer C.free(unsafe.Pointer(floatsC))
+
+	catsC := cb.MakeCharArray2D([][]string{{""}})
+	defer C.freeCharArray2D((***C.char)(unsafe.Pointer(catsC)), C.int(1), C.int(1))
 
 	for _, rateName := range rateNames {
 		a := map[string]string{}
@@ -280,7 +293,7 @@ func main() {
 				return
 			}
 
-			predicted, err := LoadModelAndPredict(rateNames, modelPath, tfidfData, labels)
+			predicted, err := LoadModelAndPredict(unsafe.Pointer(floatsC), len(floats), modelPath, tfidfData, labels)
 			if err != nil {
 				fmt.Printf("Error predicting class: %v\n", err)
 				return

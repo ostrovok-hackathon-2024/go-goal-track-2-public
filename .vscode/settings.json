@@ -1,0 +1,5 @@
+{
+    "files.associations": {
+        "catboost_wrapper.h": "c"
+    }
+}
