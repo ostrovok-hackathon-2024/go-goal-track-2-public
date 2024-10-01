@@ -1,7 +1,7 @@
 import os
 from fastapi import FastAPI
 import uvicorn
-from api.routes import router
+from .api.routes import router
 
 app = FastAPI(title="Tagger API", version="0.1.0")
 

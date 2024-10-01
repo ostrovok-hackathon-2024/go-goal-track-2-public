@@ -1,7 +1,7 @@
 from pydantic import Field
 import yaml
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Optional
 
 
 class Settings(BaseSettings):
@@ -19,4 +19,8 @@ class Settings(BaseSettings):
         return cls(**config)
 
 
-settings = Settings.from_yaml("config.yaml")
+def load_settings(config_path: Optional[str] = None) -> Settings:
+    if config_path:
+        return Settings.from_yaml(config_path)
+    else:
+        return Settings.from_yaml("config.yaml")

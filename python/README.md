@@ -6,7 +6,6 @@
 poetry install
 ```
 
-
 ## CLI
 
 ```sh
@@ -26,4 +25,22 @@ MODELS_DIR: ./models
 CATEGORIES:
   - category1
   - category2
+```
+
+## Benchmark
+
+```sh
+./bench/benchmark.sh
+```
+
+## Tests
+
+```sh
+pytest
+```
+
+## Linter
+
+```sh
+pylint .
 ```

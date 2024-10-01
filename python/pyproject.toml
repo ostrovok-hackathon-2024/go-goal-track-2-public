@@ -17,6 +17,13 @@ pandas = "^2.2.3"
 catboost = "^1.2.7"
 joblib = "^1.4.2"
 pyyaml = "^6.0.1"
+click = "^8.1.7"
+rich = "^13.9.1"
+scikit-learn = "^1.5.2"
+uvicorn = "^0.24.0"
+python-multipart = "^0.0.9"
+pyarrow = "^14.0.0"
+tenacity = "^8.3.0"
 
 [tool.poetry.group.server]
 optional = true

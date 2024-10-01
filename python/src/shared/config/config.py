@@ -19,4 +19,5 @@ class Settings(BaseSettings):
         return cls(**config)
 
 
-settings = Settings.from_yaml("config.yaml")
+def load_settings(config_path: str = "config.yaml") -> Settings:
+    return Settings.from_yaml(config_path)
