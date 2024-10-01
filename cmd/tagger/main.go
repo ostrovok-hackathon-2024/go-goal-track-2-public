@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"math"
 	"os"
 	"strings"
+	"sync"
 	"unicode"
 
 	cb "github.com/mirecl/catboost-cgo/catboost"
@@ -43,7 +46,7 @@ func charNGrams(input string, ngramRange [2]int) []string {
 }
 
 // New function to filter terms based on min_df and max_df
-func filterTerms(terms []string, minDf int, maxDf float64, documentCount int) []string {
+func _filterTerms(terms []string, minDf int, maxDf float64, documentCount int) []string {
 	termCount := make(map[string]int)
 	for _, term := range terms {
 		termCount[term]++
@@ -200,6 +203,21 @@ func LoadLabels(filePath string) ([]string, error) {
 	return labels, nil
 }
 
+func ReadRateNames(filePath string) ([]string, error) {
+	fileContent, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read rate names file: %v", err)
+	}
+
+	var rateNames []string
+	scanner := bufio.NewScanner(bytes.NewReader(fileContent))
+	for scanner.Scan() {
+		rateNames = append(rateNames, strings.Fields(scanner.Text())[0])
+	}
+
+	return rateNames, nil
+}
+
 func argmax(values []float64) int {
 	maxIndex := 0
 	maxValue := math.Inf(-1)
@@ -221,8 +239,15 @@ func main() {
 
 	labels := []string{"balcony", "bathroom", "bedding", "bedrooms", "capacity", "class", "club", "floor", "quality", "view"}
 
+	m := sync.Mutex{}
+
 	results := map[string]map[string]string{}
-	rateNames := []string{"King Premium Mountain View no balcony", "deluxe triple room"}
+
+	rateNames, err := ReadRateNames("rates_dirty.csv")
+	if err != nil {
+		fmt.Printf("Error loading rate names: %v\n", err)
+		return
+	}
 
 	for _, rateName := range rateNames {
 		a := map[string]string{}
@@ -235,23 +260,27 @@ func main() {
 	}
 
 	for _, label := range labels {
-		modelPath := fmt.Sprintf("data/cbm/catboost_model_%v.cbm", label)
-		labels, err := LoadLabels(fmt.Sprintf("data/labels/labels_%v.json", label))
+		go func() {
+			modelPath := fmt.Sprintf("data/cbm/catboost_model_%v.cbm", label)
+			labels, err := LoadLabels(fmt.Sprintf("data/labels/labels_%v.json", label))
 
-		if err != nil {
-			fmt.Printf("Error loading class labels: %v\n", err)
-			return
-		}
+			if err != nil {
+				fmt.Printf("Error loading class labels: %v\n", err)
+				return
+			}
 
-		predicted, err := LoadModelAndPredict(rateNames, modelPath, tfidfData, labels)
-		if err != nil {
-			fmt.Printf("Error predicting class: %v\n", err)
-			return
-		}
+			predicted, err := LoadModelAndPredict(rateNames, modelPath, tfidfData, labels)
+			if err != nil {
+				fmt.Printf("Error predicting class: %v\n", err)
+				return
+			}
 
-		for i, pred := range predicted {
-			results[rateNames[i]][label] = pred
-		}
+			m.Lock()
+			for i, pred := range predicted {
+				results[rateNames[i]][label] = pred
+			}
+			m.Unlock()
+		}()
 	}
 
 	resultJSON, err := json.MarshalIndent(results, "", "  ")
