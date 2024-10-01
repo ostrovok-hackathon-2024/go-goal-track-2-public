@@ -13,7 +13,7 @@ model_registry = ModelRegistry(settings.MODELS_DIR, settings.CATEGORIES)
 
 @click.group()
 def cli():
-    """Cool Python CLI for making predictions using ModelRegistry"""
+    """Hotel room rate classification CLI"""
     pass
 
 
