@@ -11,20 +11,25 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.12"
-pydantic-settings = "^2.5.2"
-fastapi = "^0.115.0"
 pydantic = "^2.9.2"
-rich = "^13.9.1"
+pydantic-settings = "^2.5.2"
+pandas = "^2.2.3"
 catboost = "^1.2.7"
 joblib = "^1.4.2"
+pyyaml = "^6.0.1"
 
 [tool.poetry.group.server]
 optional = true
 
 [tool.poetry.group.server.dependencies]
 fastapi = { extras = ["standard"], version = "^0.115.0" }
-pydantic = "^2.9.2"
-pandas = "^2.2.3"
+
+[tool.poetry.group.cli]
+optional = true
+
+[tool.poetry.group.cli.dependencies]
+click = "^8.1.7"
+rich = "^13.9.1"
 
 [build-system]
 requires = ["poetry-core"]
