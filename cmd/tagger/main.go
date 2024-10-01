@@ -1,10 +1,10 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"os"
 	"strings"
@@ -203,19 +203,26 @@ func LoadLabels(filePath string) ([]string, error) {
 	return labels, nil
 }
 
-func ReadRateNames(filePath string) ([]string, error) {
-	fileContent, err := os.ReadFile(filePath)
+func ReadRateNames(filePath string) []string {
+	f, err := os.Open(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read rate names file: %v", err)
+		log.Fatal("Unable to read input file "+filePath, err)
+	}
+	defer f.Close()
+
+	csvReader := csv.NewReader(f)
+	records, err := csvReader.ReadAll()
+	if err != nil {
+		log.Fatal("Unable to parse file as CSV for "+filePath, err)
 	}
 
-	var rateNames []string
-	scanner := bufio.NewScanner(bytes.NewReader(fileContent))
-	for scanner.Scan() {
-		rateNames = append(rateNames, strings.Fields(scanner.Text())[0])
+	ans := []string{}
+
+	for _, record := range records {
+		ans = append(ans, record[0])
 	}
 
-	return rateNames, nil
+	return ans
 }
 
 func argmax(values []float64) int {
@@ -243,7 +250,7 @@ func main() {
 
 	results := map[string]map[string]string{}
 
-	rateNames, err := ReadRateNames("rates_dirty.csv")
+	rateNames := ReadRateNames("rates_dirty.csv")
 	if err != nil {
 		fmt.Printf("Error loading rate names: %v\n", err)
 		return
@@ -259,8 +266,12 @@ func main() {
 		results[rateName] = a
 	}
 
+	var wg sync.WaitGroup
+	wg.Add(len(labels))
+
 	for _, label := range labels {
-		go func() {
+		go func(label string) {
+			defer wg.Done()
 			modelPath := fmt.Sprintf("data/cbm/catboost_model_%v.cbm", label)
 			labels, err := LoadLabels(fmt.Sprintf("data/labels/labels_%v.json", label))
 
@@ -275,13 +286,16 @@ func main() {
 				return
 			}
 
+			fmt.Printf("Predicting for %v\n", label)
 			m.Lock()
 			for i, pred := range predicted {
 				results[rateNames[i]][label] = pred
 			}
 			m.Unlock()
-		}()
+		}(label)
 	}
+
+	wg.Wait()
 
 	resultJSON, err := json.MarshalIndent(results, "", "  ")
 	if err != nil {
@@ -289,5 +303,5 @@ func main() {
 		return
 	}
 
-	fmt.Println(string(resultJSON))
+	fmt.Println(string(resultJSON)[len(resultJSON)-1488:])
 }
