@@ -40,6 +40,22 @@ func charNGrams(input string, ngramRange [2]int) []string {
 	return ngrams
 }
 
+// New function to filter terms based on min_df and max_df
+func filterTerms(terms []string, minDf int, maxDf float64, documentCount int) []string {
+	termCount := make(map[string]int)
+	for _, term := range terms {
+		termCount[term]++
+	}
+
+	var filteredTerms []string
+	for term, count := range termCount {
+		if count >= minDf && float64(count)/float64(documentCount) <= maxDf {
+			filteredTerms = append(filteredTerms, term)
+		}
+	}
+	return filteredTerms
+}
+
 func sublinearTermFrequency(term string, document string) float64 {
 	count := 0
 	ngrams := charNGrams(document, [2]int{1, 3})
@@ -54,11 +70,12 @@ func sublinearTermFrequency(term string, document string) float64 {
 	return 0
 }
 
-func CalculateTfIdfVector(rateName string, tfidfData TfIdfData) []float32 {
+func CalculateTfIdfVector(rateName string, tfidfData TfIdfData, minDf int, maxDf float64) []float32 {
 	preprocessed := strings.ToLower(rateName)
 	preprocessed = stripAccents(preprocessed)
 
-	_ = charNGrams(preprocessed, [2]int{1, 3})
+	ngrams := charNGrams(preprocessed, [2]int{1, 3})
+	ngrams = filterTerms(ngrams, minDf, maxDf, 1) // Assuming 1 document for this example
 	vector := make([]float32, len(tfidfData.Vocabulary))
 
 	for term, index := range tfidfData.Vocabulary {
@@ -67,6 +84,7 @@ func CalculateTfIdfVector(rateName string, tfidfData TfIdfData) []float32 {
 		vector[index] = float32(tf * idf)
 	}
 
+	// L2 normalization
 	norm := float32(0.0)
 	for _, v := range vector {
 		norm += v * v
@@ -101,8 +119,9 @@ func LoadModelAndPredict(rateName string, modelPath string, tfidfData TfIdfData,
 		return "", fmt.Errorf("failed to load model: %v", err)
 	}
 
-	vector := CalculateTfIdfVector(rateName, tfidfData)
+	vector := CalculateTfIdfVector(rateName, tfidfData, 1, 1.0) // Assuming 1 document for this example
 	fmt.Println(vector)
+
 	res, err := model.Predict([][]float32{vector}, [][]string{})
 
 	if err != nil {
@@ -150,8 +169,8 @@ func main() {
 	}
 
 	rateName := "King Premium Mountain View no balcony"
-	modelPath := "data/cbm/catboost_model_quality.cbm"
-	classLabels, err := LoadLabels("data/labels/labels_quality.json")
+	modelPath := "data/cbm/catboost_model_club.cbm"
+	classLabels, err := LoadLabels("data/labels/labels_club.json")
 
 	if err != nil {
 		fmt.Printf("Error loading class labels: %v\n", err)
