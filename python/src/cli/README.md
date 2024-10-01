@@ -32,25 +32,27 @@ The basic syntax for using the CLI is:
 python python/src/cli/main.py predict [OPTIONS] INPUT
 ```
 
-
 ### Options
 
 - `--categories`, `-c`: Specify categories for prediction (can be used multiple times)
-- `--output`, `-o`: Output file path (JSON for string input, CSV for file input)
+- `--output`, `-o`: Output file path (JSON or CSV)
 
 ### Examples
 
 1. Predict categories for a single input string:
+
    ```
    cli predict "Your input string here"
    ```
 
 2. Predict categories for a single input string with specific categories:
+
    ```
    cli predict "Your input string here" -c category1 -c category2
    ```
 
 3. Predict categories for inputs in a CSV file:
+
    ```
    cli predict input.csv
    ```

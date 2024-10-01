@@ -14,12 +14,9 @@ python = "^3.12"
 pydantic-settings = "^2.5.2"
 fastapi = "^0.115.0"
 pydantic = "^2.9.2"
-
-[tool.poetry.group.cli]
-optional = true
-
-[tool.poetry.group.cli.dependencies]
-
+rich = "^13.9.1"
+catboost = "^1.2.7"
+joblib = "^1.4.2"
 
 [tool.poetry.group.server]
 optional = true

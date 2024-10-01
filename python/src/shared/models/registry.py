@@ -1,10 +1,10 @@
+from functools import lru_cache
 import os
 import joblib
 import numpy as np
 from catboost import CatBoostClassifier
 from sklearn.preprocessing import LabelEncoder
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
 
 
 class ModelRegistry:
@@ -17,6 +17,7 @@ class ModelRegistry:
         self.max_workers = max_workers or os.cpu_count()
         self.load_models()
 
+    @lru_cache(maxsize=None)
     def _load_single_model(self, category: str):
         model_path = os.path.join(
             self.models_dir, "cbm", f"catboost_model_{category}.cbm"
@@ -55,18 +56,13 @@ class ModelRegistry:
         decoded = le.inverse_transform(predictions)
         return category, decoded
 
-    def predict(self, rate_names, categories=None):
-        # Replace NaN with empty string
-        cleaned_rate_names = [
-            name if isinstance(name, str) else "" for name in rate_names
-        ]
-
-        if categories is None:
+    def predict(self, rate_names: list[str], categories: list[str] = None):
+        if categories is None or len(categories) == 0:
             categories = self.categories
         else:
             categories = [cat for cat in categories if cat in self.categories]
 
-        input_tfidf = self.tfidf.transform(cleaned_rate_names)
+        input_tfidf = self.tfidf.transform(rate_names)
         results = {category: None for category in categories}
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
@@ -87,6 +83,6 @@ class ModelRegistry:
                 },
             }
             for rate_name, row in zip(
-                cleaned_rate_names, zip(*(results[cat] for cat in categories))
+                rate_names, zip(*(results[cat] for cat in categories))
             )
         ]
