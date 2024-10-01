@@ -13,6 +13,8 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
+const Eps float64 = 0.00000001
+
 type TfIdfData struct {
 	Vocabulary map[string]int `json:"vocabulary"`
 	IdfValues  []float64      `json:"idf_values"`
@@ -74,8 +76,6 @@ func CalculateTfIdfVector(rateName string, tfidfData TfIdfData, minDf int, maxDf
 	preprocessed := strings.ToLower(rateName)
 	preprocessed = stripAccents(preprocessed)
 
-	ngrams := charNGrams(preprocessed, [2]int{1, 3})
-	ngrams = filterTerms(ngrams, minDf, maxDf, 1) // Assuming 1 document for this example
 	vector := make([]float32, len(tfidfData.Vocabulary))
 
 	for term, index := range tfidfData.Vocabulary {
@@ -84,11 +84,11 @@ func CalculateTfIdfVector(rateName string, tfidfData TfIdfData, minDf int, maxDf
 		vector[index] = float32(tf * idf)
 	}
 
-	// L2 normalization
 	norm := float32(0.0)
 	for _, v := range vector {
 		norm += v * v
 	}
+
 	norm = float32(math.Sqrt(float64(norm)))
 	if norm > 0 {
 		for i := range vector {
@@ -119,18 +119,53 @@ func LoadModelAndPredict(rateName string, modelPath string, tfidfData TfIdfData,
 		return "", fmt.Errorf("failed to load model: %v", err)
 	}
 
-	vector := CalculateTfIdfVector(rateName, tfidfData, 1, 1.0) // Assuming 1 document for this example
-	fmt.Println(vector)
-
+	vector := CalculateTfIdfVector(rateName, tfidfData, 2, 0.95)
 	res, err := model.Predict([][]float32{vector}, [][]string{})
 
 	if err != nil {
 		return "", fmt.Errorf("failed to predict: %v", err)
 	}
 
-	predicted := labels[argmax(res)]
+	probs := softmax(res)
+	fmt.Println(labels, res, probs)
+	predicted := ""
+
+	if len(probs) == 1 {
+		probability := 1.0 / (1.0 + math.Exp(-res[0]))
+
+		if probability >= 0.5 {
+			return labels[1], nil
+		} else {
+			return labels[0], nil
+		}
+	} else {
+		predicted = labels[argmax(probs)]
+	}
 
 	return predicted, nil
+}
+
+func softmax(logits []float64) []float64 {
+	maxLogit := logits[0]
+	for _, logit := range logits[1:] {
+		if logit > maxLogit {
+			maxLogit = logit
+		}
+	}
+
+	expSum := 0.0
+	probs := make([]float64, len(logits))
+	for i, logit := range logits {
+		exp := math.Exp(logit - maxLogit)
+		probs[i] = exp
+		expSum += exp
+	}
+
+	for i := range probs {
+		probs[i] /= expSum
+	}
+
+	return probs
 }
 
 func LoadLabels(filePath string) ([]string, error) {
@@ -153,7 +188,7 @@ func argmax(values []float64) int {
 	maxIndex := 0
 	maxValue := math.Inf(-1)
 	for i, v := range values {
-		if v > maxValue {
+		if v-maxValue > Eps {
 			maxValue = v
 			maxIndex = i
 		}
@@ -168,23 +203,27 @@ func main() {
 		return
 	}
 
+	labels := []string{"balcony", "bathroom", "bedding", "bedrooms", "capacity", "class", "club", "floor", "quality", "view"}
+
+	results := map[string]string{}
 	rateName := "King Premium Mountain View no balcony"
-	modelPath := "data/cbm/catboost_model_club.cbm"
-	classLabels, err := LoadLabels("data/labels/labels_club.json")
 
-	if err != nil {
-		fmt.Printf("Error loading class labels: %v\n", err)
-		return
-	}
+	for _, label := range labels {
+		modelPath := fmt.Sprintf("data/cbm/catboost_model_%v.cbm", label)
+		classLabels, err := LoadLabels(fmt.Sprintf("data/labels/labels_%v.json", label))
 
-	predictedClass, err := LoadModelAndPredict(rateName, modelPath, tfidfData, classLabels)
-	if err != nil {
-		fmt.Printf("Error predicting class: %v\n", err)
-		return
-	}
+		if err != nil {
+			fmt.Printf("Error loading class labels: %v\n", err)
+			return
+		}
 
-	results := map[string]string{
-		"class": predictedClass,
+		predicted, err := LoadModelAndPredict(rateName, modelPath, tfidfData, classLabels)
+		if err != nil {
+			fmt.Printf("Error predicting class: %v\n", err)
+			return
+		}
+
+		results[label] = predicted
 	}
 
 	resultJSON, err := json.MarshalIndent(results, "", "  ")
