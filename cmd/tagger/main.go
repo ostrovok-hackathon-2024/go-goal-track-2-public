@@ -12,10 +12,10 @@ import (
 	"unicode"
 	"unsafe"
 
-	cb "github.com/go-goal/tagger/cmd/tagger/catboost"
-
 	"golang.org/x/text/transform"
 	"golang.org/x/text/unicode/norm"
+
+	cb "github.com/go-goal/tagger/cmd/tagger/catboost"
 )
 
 /*
@@ -26,7 +26,7 @@ import (
 */
 import "C"
 
-const Eps float64 = 0.00000001
+const Eps float64 = 1e-8
 
 type TfIdfData struct {
 	Vocabulary map[string]int `json:"vocabulary"`
@@ -47,7 +47,10 @@ func charNGrams(input string, ngramRange [2]int) []string {
 	for _, word := range words {
 		runes := []rune(" " + word + " ")
 		for n := ngramRange[0]; n <= ngramRange[1]; n++ {
-			for i := 0; i < len(runes)-n+1; i++ {
+			if len(runes) < n {
+				continue
+			}
+			for i := 0; i <= len(runes)-n; i++ {
 				ngrams = append(ngrams, string(runes[i:i+n]))
 			}
 		}
@@ -55,21 +58,7 @@ func charNGrams(input string, ngramRange [2]int) []string {
 	return ngrams
 }
 
-// New function to filter terms based on min_df and max_df
-func _filterTerms(terms []string, minDf int, maxDf float64, documentCount int) []string {
-	termCount := make(map[string]int)
-	for _, term := range terms {
-		termCount[term]++
-	}
-
-	var filteredTerms []string
-	for term, count := range termCount {
-		if count >= minDf && float64(count)/float64(documentCount) <= maxDf {
-			filteredTerms = append(filteredTerms, term)
-		}
-	}
-	return filteredTerms
-}
+// _filterTerms remains unchanged
 
 func sublinearTermFrequency(term string, document string) float64 {
 	count := 0
@@ -85,40 +74,59 @@ func sublinearTermFrequency(term string, document string) float64 {
 	return 0
 }
 
-func CalculateTfIdfVector(rateName string, tfidfData TfIdfData, minDf int, maxDf float64) []float32 {
-	preprocessed := strings.ToLower(rateName)
-	preprocessed = stripAccents(preprocessed)
+func CalculateTfIdfVector(rateName string, tfidfData TfIdfData) []float32 {
+	preprocessed := strings.ToLower(stripAccents(rateName))
+	ngrams := charNGrams(preprocessed, [2]int{1, 3})
+
+	termCounts := make(map[string]int, len(ngrams))
+	for _, ngram := range ngrams {
+		termCounts[ngram]++
+	}
 
 	vector := make([]float32, len(tfidfData.Vocabulary))
 
+	// Compute TF-IDF
 	for term, index := range tfidfData.Vocabulary {
-		tf := sublinearTermFrequency(term, preprocessed)
-		idf := tfidfData.IdfValues[index]
-		vector[index] = float32(tf * idf)
+		if count, exists := termCounts[term]; exists && count > 0 {
+			vector[index] = float32((1 + math.Log(float64(count))) * tfidfData.IdfValues[index])
+		} else {
+			vector[index] = 0
+		}
 	}
 
-	norm := float32(0.0)
+	// Normalize the vector
+	var normVal float32
 	for _, v := range vector {
-		norm += v * v
+		normVal += v * v
 	}
-
-	norm = float32(math.Sqrt(float64(norm)))
-	if norm > 0 {
+	normVal = float32(math.Sqrt(float64(normVal)))
+	if normVal > 0 {
 		for i := range vector {
-			vector[i] /= norm
+			vector[i] /= normVal
 		}
 	}
 
 	return vector
 }
 
-func CalculateTfIdfVectors(rateNames []string, tfidfData TfIdfData, minDf int, maxDf float64) [][]float32 {
+func CalculateTfIdfVectors(rateNames []string, tfidfData TfIdfData) [][]float32 {
 	vectors := make([][]float32, len(rateNames))
+	var wg sync.WaitGroup
+	wg.Add(len(rateNames))
+
+	// Limit concurrency
+	workerPool := make(chan struct{}, 8) // Adjust based on CPU cores
 
 	for i, rateName := range rateNames {
-		vectors[i] = CalculateTfIdfVector(rateName, tfidfData, minDf, maxDf)
+		go func(i int, rateName string) {
+			defer wg.Done()
+			workerPool <- struct{}{}
+			vectors[i] = CalculateTfIdfVector(rateName, tfidfData)
+			<-workerPool
+		}(i, rateName)
 	}
 
+	wg.Wait()
 	return vectors
 }
 
@@ -135,43 +143,13 @@ func LoadTfIdfData(filePath string) (TfIdfData, error) {
 	return data, nil
 }
 
-func LoadModelAndPredict(floatsC unsafe.Pointer, num int, modelPath string, tfidfData TfIdfData, labels []string) ([]string, error) {
-	model, err := cb.LoadFullModelFromFile(modelPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load model: %v", err)
-	}
-
-	res, err := model.Predict(floatsC, num)
-	if err != nil {
-		return nil, fmt.Errorf("failed to predict: %v", err)
-	}
-
-	predictions := make([]string, num)
-
-	if len(labels) == 2 {
-		for i, logit := range res {
-			probability := 1.0 / (1.0 + math.Exp(-float64(logit)))
-			if probability >= 0.5 {
-				predictions[i] = labels[1]
-			} else {
-				predictions[i] = labels[0]
-			}
-		}
-	} else {
-		numClasses := len(labels)
-		for i := 0; i < num; i++ {
-			logits := res[i*numClasses : (i+1)*numClasses]
-			probs := softmax(logits)
-			predictions[i] = labels[argmax(probs)]
-		}
-	}
-
-	return predictions, nil
+func LoadModelAndPredict(model cb.Model, floatsC unsafe.Pointer, num int) ([]float64, error) {
+	return model.Predict(floatsC, num)
 }
 
 func softmax(logits []float64) []float64 {
-	maxLogit := logits[0]
-	for _, logit := range logits[1:] {
+	maxLogit := math.Inf(-1)
+	for _, logit := range logits {
 		if logit > maxLogit {
 			maxLogit = logit
 		}
@@ -194,39 +172,36 @@ func softmax(logits []float64) []float64 {
 
 func LoadLabels(filePath string) ([]string, error) {
 	var labels []string
-
 	fileContent, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read labels file: %v", err)
 	}
-
 	err = json.Unmarshal(fileContent, &labels)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal labels: %v", err)
 	}
-
 	return labels, nil
 }
 
 func ReadRateNames(filePath string) []string {
 	f, err := os.Open(filePath)
 	if err != nil {
-		log.Fatal("Unable to read input file "+filePath, err)
+		log.Fatalf("Unable to read input file %s: %v", filePath, err)
 	}
 	defer f.Close()
 
 	csvReader := csv.NewReader(f)
 	records, err := csvReader.ReadAll()
 	if err != nil {
-		log.Fatal("Unable to parse file as CSV for "+filePath, err)
+		log.Fatalf("Unable to parse file as CSV for %s: %v", filePath, err)
 	}
 
-	ans := []string{}
-
+	ans := make([]string, 0, len(records))
 	for _, record := range records {
-		ans = append(ans, record[0])
+		if len(record) > 0 {
+			ans = append(ans, record[0])
+		}
 	}
-
 	return ans
 }
 
@@ -234,7 +209,7 @@ func argmax(values []float64) int {
 	maxIndex := 0
 	maxValue := math.Inf(-1)
 	for i, v := range values {
-		if v-maxValue > Eps {
+		if v > maxValue+Eps {
 			maxValue = v
 			maxIndex = i
 		}
@@ -251,17 +226,9 @@ func main() {
 
 	labels := []string{"balcony", "bathroom", "bedding", "bedrooms", "capacity", "class", "club", "floor", "quality", "view"}
 
-	m := sync.Mutex{}
+	rateNames := ReadRateNames("rates_dirty.csv")
 
-	results := map[string]map[string]string{}
-
-	rateNames := ReadRateNames("rates_clean.csv")
-	if err != nil {
-		fmt.Printf("Error loading rate names: %v\n", err)
-		return
-	}
-
-	floats := CalculateTfIdfVectors(rateNames, tfidfData, 2, 0.95)
+	floats := CalculateTfIdfVectors(rateNames, tfidfData)
 
 	floatsC := cb.MakeFloatArray2D(floats)
 	defer C.free(unsafe.Pointer(floatsC))
@@ -269,52 +236,131 @@ func main() {
 	catsC := cb.MakeCharArray2D([][]string{{""}})
 	defer C.freeCharArray2D((***C.char)(unsafe.Pointer(catsC)), C.int(1), C.int(1))
 
+	results := make(map[string]map[string]string, len(rateNames))
 	for _, rateName := range rateNames {
-		a := map[string]string{}
-
+		results[rateName] = make(map[string]string, len(labels))
 		for _, label := range labels {
-			a[label] = ""
+			results[rateName][label] = ""
 		}
-
-		results[rateName] = a
 	}
 
 	var wg sync.WaitGroup
 	wg.Add(len(labels))
 
+	fmt.Println("Starting predictions")
+
+	// Preload all models and labels
+	models := make(map[string]cb.Model, len(labels))
+	labelsMap := make(map[string][]string, len(labels))
+	for _, label := range labels {
+		modelPath := fmt.Sprintf("data/cbm/catboost_model_%v.cbm", label)
+		model, err := cb.LoadFullModelFromFile(modelPath)
+		if err != nil {
+			fmt.Printf("Error loading model for %v: %v\n", label, err)
+			continue
+		}
+		models[label] = *model
+
+		labelsPath := fmt.Sprintf("data/labels/labels_%v.json", label)
+		loadedLabels, err := LoadLabels(labelsPath)
+		if err != nil {
+			fmt.Printf("Error loading labels for %v: %v\n", label, err)
+			continue
+		}
+		labelsMap[label] = loadedLabels
+	}
+
+	var resultsMutex sync.Mutex
+
 	for _, label := range labels {
 		go func(label string) {
 			defer wg.Done()
-			modelPath := fmt.Sprintf("data/cbm/catboost_model_%v.cbm", label)
-			labels, err := LoadLabels(fmt.Sprintf("data/labels/labels_%v.json", label))
-
-			if err != nil {
-				fmt.Printf("Error loading class labels: %v\n", err)
+			model, exists := models[label]
+			if !exists {
+				return
+			}
+			classLabels, exists := labelsMap[label]
+			if !exists {
 				return
 			}
 
-			predicted, err := LoadModelAndPredict(unsafe.Pointer(floatsC), len(floats), modelPath, tfidfData, labels)
+			predicted, err := LoadModelAndPredict(model, unsafe.Pointer(floatsC), len(floats))
 			if err != nil {
-				fmt.Printf("Error predicting class: %v\n", err)
+				fmt.Printf("Error predicting for label %v: %v\n", label, err)
 				return
 			}
 
 			fmt.Printf("Predicting for %v\n", label)
-			m.Lock()
-			for i, pred := range predicted {
+
+			predictions := make([]string, len(rateNames))
+			if len(classLabels) == 2 {
+				for i, logit := range predicted {
+					probability := 1.0 / (1.0 + math.Exp(-logit))
+					if probability >= 0.5 {
+						predictions[i] = classLabels[1]
+					} else {
+						predictions[i] = classLabels[0]
+					}
+				}
+			} else {
+				numClasses := len(classLabels)
+				for i := 0; i < len(rateNames); i++ {
+					start := i * numClasses
+					end := start + numClasses
+					if end > len(predicted) {
+						fmt.Printf("Insufficient logits for rateName %v, label %v\n", rateNames[i], label)
+						predictions[i] = ""
+						continue
+					}
+					logits := predicted[start:end]
+					probs := softmax(logits)
+					predictions[i] = classLabels[argmax(probs)]
+				}
+			}
+
+			resultsMutex.Lock()
+			for i, pred := range predictions {
 				results[rateNames[i]][label] = pred
 			}
-			m.Unlock()
+			resultsMutex.Unlock()
 		}(label)
 	}
 
 	wg.Wait()
 
-	resultJSON, err := json.MarshalIndent(results, "", "  ")
+	// Write results to CSV
+	outputFile, err := os.Create("predictions.csv")
 	if err != nil {
-		fmt.Printf("Error marshalling results: %v\n", err)
+		fmt.Printf("Error creating output file: %v\n", err)
+		return
+	}
+	defer outputFile.Close()
+
+	writer := csv.NewWriter(outputFile)
+	defer writer.Flush()
+
+	// Write header
+	header := append([]string{"rate_name"}, labels...)
+	if err := writer.Write(header); err != nil {
+		fmt.Printf("Error writing header to CSV: %v\n", err)
 		return
 	}
 
-	fmt.Println(string(resultJSON)[len(resultJSON)-1488:])
+	// Prepare data to write
+	records := make([][]string, 0, len(rateNames))
+	for _, rateName := range rateNames {
+		row := make([]string, 1+len(labels))
+		row[0] = rateName
+		for i, label := range labels {
+			row[i+1] = results[rateName][label]
+		}
+		records = append(records, row)
+	}
+
+	if err := writer.WriteAll(records); err != nil {
+		fmt.Printf("Error writing records to CSV: %v\n", err)
+		return
+	}
+
+	fmt.Println("Predictions written to predictions.csv")
 }
