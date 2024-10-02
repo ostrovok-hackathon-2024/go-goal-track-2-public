@@ -226,7 +226,7 @@ func main() {
 
 	labels := []string{"balcony", "bathroom", "bedding", "bedrooms", "capacity", "class", "club", "floor", "quality", "view"}
 
-	rateNames := ReadRateNames("rates_dirty.csv")
+	rateNames := ReadRateNames("rates_dirty.csv")[1:]
 
 	floats := CalculateTfIdfVectors(rateNames, tfidfData)
 
