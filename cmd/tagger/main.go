@@ -30,8 +30,8 @@ import "C"
 const Eps float64 = 1e-8
 
 type TfIdfData struct {
-	Vocabulary map[string]int32 `json:"vocabulary"` // Change int to int32
-	IdfValues  []float32        `json:"idf_values"` // Change float64 to float32
+	Vocabulary map[string]int32 `json:"vocabulary"`
+	IdfValues  []float32        `json:"idf_values"`
 }
 
 func stripAccents(input string) string {
@@ -75,16 +75,54 @@ func sublinearTermFrequency(term string, document string) float64 {
 	return 0
 }
 
+// func CalculateTfIdfVector(rateName string, tfidfData *TfIdfData) []float32 {
+// 	preprocessed := strings.ToLower(stripAccents(rateName))
+// 	ngrams := charNGrams(preprocessed, [2]int{1, 3})
+
+// 	vector := make([]float32, len(tfidfData.Vocabulary))
+
+// 	// Compute TF-IDF
+// 	for _, ngram := range ngrams {
+// 		if index, exists := tfidfData.Vocabulary[ngram]; exists && index > 0 {
+// 			vector[index] += tfidfData.IdfValues[index]
+// 		} else {
+// 			vector[index] = 0
+// 		}
+// 	}
+
+// 	// Normalize the vector
+// 	var normVal float32
+// 	for _, v := range vector {
+// 		normVal += v * v
+// 	}
+// 	normVal = float32(math.Sqrt(float64(normVal)))
+// 	if normVal > 0 {
+// 		for i := range vector {
+// 			vector[i] /= normVal
+// 		}
+// 	}
+
+// 	return vector
+// }
+
 func CalculateTfIdfVector(rateName string, tfidfData *TfIdfData) []float32 {
 	preprocessed := strings.ToLower(stripAccents(rateName))
 	ngrams := charNGrams(preprocessed, [2]int{1, 3})
 
+	termCounts := make(map[string]int, len(ngrams))
+	for _, ngram := range ngrams {
+		termCounts[ngram]++
+	}
+
 	vector := make([]float32, len(tfidfData.Vocabulary))
 
 	// Compute TF-IDF
-	for _, ngram := range ngrams {
-		if index, exists := tfidfData.Vocabulary[ngram]; exists {
-			vector[index] += tfidfData.IdfValues[index]
+	for term, index := range tfidfData.Vocabulary {
+		if count, exists := termCounts[term]; exists && count > 0 {
+			tf := float32(1 + math.Log(float64(count)))
+			vector[index] = tf * tfidfData.IdfValues[index]
+		} else {
+			vector[index] = 0
 		}
 	}
 
