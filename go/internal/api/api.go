@@ -57,9 +57,6 @@ func predictRateNames(c *fiber.Ctx) error {
 		}
 	}
 
-	// Calculate TF-IDF vectors
-	floats := tfidf.CalculateTfIdfVectors(cleanedRateNames, &tfidfData)
-
 	if len(input.Categories) == 0 {
 		input.Categories = cfg.Categories
 	}
@@ -67,7 +64,13 @@ func predictRateNames(c *fiber.Ctx) error {
 	// Load models and make predictions
 	cbmDir := filepath.Join(cfg.ModelsDir, "cbm")
 	labelsDir := filepath.Join(cfg.ModelsDir, "labels/json")
-	results, err := model.PredictAll(floats, cleanedRateNames, input.Categories, cbmDir, labelsDir)
+	predictor := model.NewPredictor(&tfidfData, cbmDir, labelsDir, input.Categories)
+	err := predictor.LoadModels()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	results, err := predictor.PredictAll(cleanedRateNames)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -106,11 +109,16 @@ func predictRateNamesCSV(c *fiber.Ctx) error {
 		}
 	}
 
-	// Calculate TF-IDF vectors
-	floats := tfidf.CalculateTfIdfVectors(rateNames, &tfidfData)
-
 	// Load models and make predictions
-	results, err := model.PredictAll(floats, rateNames, categories, filepath.Join(cfg.ModelsDir, "cbm"), filepath.Join(cfg.ModelsDir, "labels"))
+	cbmDir := filepath.Join(cfg.ModelsDir, "cbm")
+	labelsDir := filepath.Join(cfg.ModelsDir, "labels/json")
+	predictor := model.NewPredictor(&tfidfData, cbmDir, labelsDir, categories)
+	err = predictor.LoadModels()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	results, err := predictor.PredictAll(rateNames)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}

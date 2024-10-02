@@ -19,40 +19,60 @@ type TfIdfData struct {
 	IdfValues  []float32        `json:"idf_values"`
 }
 
-func LoadTfIdfData(filePath string) (TfIdfData, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return TfIdfData{}, fmt.Errorf("error opening file: %v", err)
-	}
-	defer file.Close()
+func stripAccents(input string) string {
+	t := transform.Chain(norm.NFD, transform.RemoveFunc(func(r rune) bool {
+		return unicode.Is(unicode.Mn, r)
+	}), norm.NFC)
+	output, _, _ := transform.String(t, input)
+	return output
+}
 
-	var data TfIdfData
-	decoder := json.NewDecoder(file)
-	if err := decoder.Decode(&data); err != nil {
-		return TfIdfData{}, fmt.Errorf("error decoding JSON: %v", err)
+func charNGrams(input string, ngramRange [2]int) []string {
+	ngrams := []string{}
+	words := strings.Fields(input)
+	for _, word := range words {
+		runes := []rune(" " + word + " ")
+		for n := ngramRange[0]; n <= ngramRange[1]; n++ {
+			if len(runes) < n {
+				continue
+			}
+			for i := 0; i <= len(runes)-n; i++ {
+				ngrams = append(ngrams, string(runes[i:i+n]))
+			}
+		}
 	}
+	return ngrams
+}
 
-	return data, nil
+func sublinearTermFrequency(term string, document string) float64 {
+	count := 0
+	ngrams := charNGrams(document, [2]int{1, 3})
+	for _, ngram := range ngrams {
+		if ngram == term {
+			count++
+		}
+	}
+	if count > 0 {
+		return 1 + math.Log(float64(count))
+	}
+	return 0
 }
 
 func CalculateTfIdfVector(rateName string, tfidfData *TfIdfData) []float32 {
 	preprocessed := strings.ToLower(stripAccents(rateName))
 	ngrams := charNGrams(preprocessed, [2]int{1, 3})
-
-	termCounts := make(map[string]int, len(ngrams))
-	for _, ngram := range ngrams {
-		termCounts[ngram]++
-	}
-
 	vector := make([]float32, len(tfidfData.Vocabulary))
 
+	// Count term frequencies
+	termFreq := make(map[string]int)
+	for _, ngram := range ngrams {
+		termFreq[ngram]++
+	}
+
 	// Compute TF-IDF
-	for term, index := range tfidfData.Vocabulary {
-		if count, exists := termCounts[term]; exists && count > 0 {
-			tf := float32(1 + math.Log(float64(count)))
-			vector[index] = tf * tfidfData.IdfValues[index]
-		} else {
-			vector[index] = 0
+	for ngram, tf := range termFreq {
+		if index, exists := tfidfData.Vocabulary[ngram]; exists && index >= 0 && index < int32(len(vector)) {
+			vector[index] = float32(tf) * tfidfData.IdfValues[index]
 		}
 	}
 
@@ -72,55 +92,39 @@ func CalculateTfIdfVector(rateName string, tfidfData *TfIdfData) []float32 {
 }
 
 func CalculateTfIdfVectors(rateNames []string, tfidfData *TfIdfData) [][]float32 {
+	vectors := make([][]float32, len(rateNames))
 	numWorkers := runtime.NumCPU()
-	vectorChan := make(chan []float32, len(rateNames))
+	jobs := make(chan int, len(rateNames))
 	var wg sync.WaitGroup
 
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
-		go func(workerID int) {
+		go func() {
 			defer wg.Done()
-			for j := workerID; j < len(rateNames); j += numWorkers {
-				vector := CalculateTfIdfVector(rateNames[j], tfidfData)
-				vectorChan <- vector
+			for j := range jobs {
+				vectors[j] = CalculateTfIdfVector(rateNames[j], tfidfData)
 			}
-		}(i)
+		}()
 	}
 
-	go func() {
-		wg.Wait()
-		close(vectorChan)
-	}()
-
-	vectors := make([][]float32, 0, len(rateNames))
-	for vector := range vectorChan {
-		vectors = append(vectors, vector)
+	for i := range rateNames {
+		jobs <- i
 	}
+	close(jobs)
 
+	wg.Wait()
 	return vectors
 }
 
-func stripAccents(s string) string {
-	t := transform.Chain(norm.NFD, transform.RemoveFunc(func(r rune) bool {
-		return unicode.Is(unicode.Mn, r)
-	}), norm.NFC)
-	result, _, _ := transform.String(t, s)
-	return result
-}
-
-func charNGrams(input string, ngramRange [2]int) []string {
-	ngrams := []string{}
-	words := strings.Fields(input)
-	for _, word := range words {
-		runes := []rune(" " + word + " ")
-		for n := ngramRange[0]; n <= ngramRange[1]; n++ {
-			if len(runes) < n {
-				continue
-			}
-			for i := 0; i <= len(runes)-n; i++ {
-				ngrams = append(ngrams, string(runes[i:i+n]))
-			}
-		}
+func LoadTfIdfData(filePath string) (TfIdfData, error) {
+	data := TfIdfData{}
+	fileContent, err := os.ReadFile(filePath)
+	if err != nil {
+		return data, fmt.Errorf("failed to read TF-IDF file: %v", err)
 	}
-	return ngrams
+	err = json.Unmarshal(fileContent, &data)
+	if err != nil {
+		return data, fmt.Errorf("failed to unmarshal TF-IDF data: %v", err)
+	}
+	return data, nil
 }

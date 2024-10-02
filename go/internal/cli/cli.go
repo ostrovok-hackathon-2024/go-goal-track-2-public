@@ -96,9 +96,6 @@ func runTagger(cmd *cobra.Command, args []string) {
 		inputStrings = []string{inputFile}
 	}
 
-	// Calculate TF-IDF vectors
-	floats := tfidf.CalculateTfIdfVectors(inputStrings, &tfidfData)
-
 	// If no categories are specified, use the default categories from the config
 	if len(categories) == 0 {
 		categories = cfg.Categories
@@ -107,7 +104,14 @@ func runTagger(cmd *cobra.Command, args []string) {
 	// Load models and make predictions
 	cbmDir := filepath.Join(cfg.ModelsDir, "cbm")
 	labelsDir := filepath.Join(cfg.ModelsDir, "labels/json")
-	results, err := model.PredictAll(floats, inputStrings, categories, cbmDir, labelsDir)
+	predictor := model.NewPredictor(&tfidfData, cbmDir, labelsDir, categories)
+	err = predictor.LoadModels()
+	if err != nil {
+		fmt.Printf("Error loading models: %v\n", err)
+		return
+	}
+
+	results, err := predictor.PredictAll(inputStrings)
 	if err != nil {
 		fmt.Printf("Error making predictions: %v\n", err)
 		return
