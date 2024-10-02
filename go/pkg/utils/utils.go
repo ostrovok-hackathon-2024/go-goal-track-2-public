@@ -85,11 +85,8 @@ func WriteCSV(outputFile string, headers []string, firstColData []string, rowDat
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
 
-	writer.Write(headers)
 
-	if len(firstColData) != len(rowData) {
-		return fmt.Errorf("first column data length does not match row data length")
-	}
+	writer.Write(headers)
 
 	for _, inputValue := range firstColData {
 		row := make([]string, len(headers))

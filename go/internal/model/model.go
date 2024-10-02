@@ -1,7 +1,6 @@
 package model
 
 import (
-	"C"
 	"fmt"
 	"math"
 	"path/filepath"
@@ -12,6 +11,9 @@ import (
 	"github.com/go-goal/tagger/pkg/utils"
 )
 
+// #include <stdlib.h>
+import "C"
+
 const Eps float64 = 1e-8
 
 func LoadModelAndPredict(model cb.Model, floatsC unsafe.Pointer, num int) ([]float64, error) {
@@ -20,6 +22,7 @@ func LoadModelAndPredict(model cb.Model, floatsC unsafe.Pointer, num int) ([]flo
 
 func PredictAll(floats [][]float32, namesToPredict []string, labels []string, modelsDir, labelsDir string) (map[string]map[string]string, error) {
 	floatsC := cb.MakeFloatArray2D(floats)
+	defer C.free(unsafe.Pointer(floatsC))
 
 	results := make(map[string]map[string]string, len(namesToPredict))
 	for _, rateName := range namesToPredict {
@@ -84,8 +87,8 @@ func PredictAll(floats [][]float32, namesToPredict []string, labels []string, mo
 }
 
 func softmax(logits []float64) []float64 {
-	maxLogit := logits[0]
-	for _, logit := range logits[1:] {
+	maxLogit := math.Inf(-1)
+	for _, logit := range logits {
 		if logit > maxLogit {
 			maxLogit = logit
 		}
@@ -106,16 +109,16 @@ func softmax(logits []float64) []float64 {
 	return probs
 }
 
-func argmax(arr []float64) int {
-	maxIdx := 0
-	maxVal := arr[0]
-	for i, val := range arr[1:] {
-		if val > maxVal {
-			maxIdx = i + 1
-			maxVal = val
+func argmax(values []float64) int {
+	maxIndex := 0
+	maxValue := math.Inf(-1)
+	for i, v := range values {
+		if v > maxValue+Eps {
+			maxValue = v
+			maxIndex = i
 		}
 	}
-	return maxIdx
+	return maxIndex
 }
 
 func makePredictions(predicted []float64, labels []string, numRateNames int) []string {
