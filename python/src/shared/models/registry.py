@@ -5,10 +5,20 @@ import numpy as np
 from catboost import CatBoostClassifier
 from sklearn.preprocessing import LabelEncoder
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import os
+import sys
+import contextlib
 
 
 class ModelRegistry:
-    def __init__(self, models_dir: str, categories: list[str], max_workers: int = None):
+    def __init__(
+        self,
+        models_dir: str,
+        categories: list[str],
+        max_workers: int = None,
+        verbose: bool = False,
+    ):
+        self.verbose = verbose
         self.models_dir = models_dir
         self.categories = categories
         self.models = {}
@@ -24,18 +34,16 @@ class ModelRegistry:
         )
         model = CatBoostClassifier()
         model.load_model(model_path)
-
         le_path = os.path.join(
-            self.models_dir, "label_text", f"label_encoder_{category}.npy"
+            self.models_dir, "labels", f"npy/label_encoder_{category}.npy"
         )
         le = LabelEncoder()
         le.classes_ = np.load(le_path, allow_pickle=True)
-
         return category, model, le
 
     def load_models(self):
         self.tfidf = joblib.load(
-            os.path.join(self.models_dir, "tfidf_vectorizer.joblib")
+            os.path.join(self.models_dir, "tfidf/tfidf_vectorizer.joblib")
         )
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
@@ -51,7 +59,9 @@ class ModelRegistry:
     def predict_category(self, category: str, input_tfidf: np.ndarray):
         model = self.models[category]
         le = self.label_encoders[category]
-        predictions = model.predict(input_tfidf)
+        with open(os.devnull, 'w') as devnull:
+            with contextlib.redirect_stdout(devnull):
+                predictions = model.predict(input_tfidf)
         predictions = predictions.ravel()
         decoded = le.inverse_transform(predictions)
         return category, decoded

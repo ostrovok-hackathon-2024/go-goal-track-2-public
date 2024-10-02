@@ -5,7 +5,7 @@ from typing import List, Optional
 
 
 class Settings(BaseSettings):
-    MODELS_DIR: str = Field(default="../artifacts/models", alias="models_dir")
+    MODELS_DIR: str = Field(default="../artifacts/cbm", alias="models_dir")
     CATEGORIES: List[str] = Field(alias="categories")
 
     model_config = ConfigDict(case_sensitive=False, extra="ignore")
