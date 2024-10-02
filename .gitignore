@@ -1,6 +1,8 @@
 .venv
 catboost_info
 
+__pycache__
+
 /target
 /frontend/spa/build
 /frontend/spa/node_modules
