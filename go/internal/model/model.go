@@ -41,6 +41,7 @@ func NewPredictor(tfidfData *tfidf.TfIdfData, modelsDir, labelsDir string, categ
 func (p *Predictor) LoadModels() error {
 	var wg sync.WaitGroup
 	errChan := make(chan error, len(p.Categories))
+	var mu sync.Mutex
 
 	for _, category := range p.Categories {
 		wg.Add(1)
@@ -52,7 +53,6 @@ func (p *Predictor) LoadModels() error {
 				errChan <- fmt.Errorf("error loading model for %s: %v", cat, err)
 				return
 			}
-			p.loadedModels[cat] = model
 
 			labelsPath := filepath.Join(p.LabelsDir, fmt.Sprintf("labels_%s.json", cat))
 			labels, err := loadLabels(labelsPath)
@@ -60,7 +60,11 @@ func (p *Predictor) LoadModels() error {
 				errChan <- fmt.Errorf("error loading labels for %s: %v", cat, err)
 				return
 			}
+
+			mu.Lock()
+			p.loadedModels[cat] = model
 			p.loadedLabels[cat] = labels
+			mu.Unlock()
 		}(category)
 	}
 
