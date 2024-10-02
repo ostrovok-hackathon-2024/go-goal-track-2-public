@@ -2,9 +2,15 @@
 
 ## Setup
 
+### Install dependencies
+
 ```sh
 poetry install
 ```
+
+### Install hyperfine
+
+Or use [your](https://github.com/sharkdp/hyperfine) package manager.
 
 ## Run
 
