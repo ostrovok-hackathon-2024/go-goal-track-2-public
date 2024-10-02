@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/csv"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -35,9 +36,8 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ./config.yaml)")
-	rootCmd.Flags().StringP("input", "i", "", "Input CSV file containing strings to classify")
-	rootCmd.Flags().StringP("output", "o", "predictions.csv", "Output CSV file for predictions")
-	rootCmd.Flags().StringP("tfidf", "t", "", "TF-IDF data file")
+	rootCmd.Flags().StringP("input", "i", "", "Input CSV file containing strings to classify or a single string to classify")
+	rootCmd.Flags().StringP("output", "o", "", "Output CSV file for predictions")
 	rootCmd.Flags().StringSliceVarP(&categories, "category", "c", []string{}, "Categories to predict (can be specified multiple times)")
 }
 
@@ -67,45 +67,79 @@ func initConfig() {
 func runTagger(cmd *cobra.Command, args []string) {
 	inputFile, _ := cmd.Flags().GetString("input")
 	outputFile, _ := cmd.Flags().GetString("output")
-	tfidfFile, _ := cmd.Flags().GetString("tfidf")
 
 	if inputFile == "" {
-		fmt.Println("Error: input file is required")
+		fmt.Println("Error: input is required")
 		return
 	}
 
-	// Load TF-IDF data
-	if tfidfFile == "" {
-		tfidfFile = filepath.Join(cfg.ModelsDir, "tfidf", "tfidf_data.json")
-
-	}
+	tfidfFile := filepath.Join(cfg.ModelsDir, "tfidf", "tfidf_data.json")
 	tfidfData, err := tfidf.LoadTfIdfData(tfidfFile)
 	if err != nil {
 		fmt.Printf("Error loading TF-IDF data: %v\n", err)
 		return
 	}
 
-	// Read rate names
-	rateNames := utils.ReadRateNames(inputFile)[1:]
+	// Determine mode based on input
+	isFileMode := utils.IsFile(inputFile)
+
+	var inputStrings []string
+	if isFileMode {
+		// File mode: Read rate names from file
+		inputStrings, err = utils.ReadFirstCSVColumn(inputFile, cfg.InputCol)
+		if err != nil {
+			fmt.Printf("Error reading rate names: %v\n", err)
+			return
+		}
+	} else {
+		// Text input mode: Use the input directly
+		inputStrings = []string{inputFile}
+	}
 
 	// Calculate TF-IDF vectors
-	floats := tfidf.CalculateTfIdfVectors(rateNames, &tfidfData)
+	floats := tfidf.CalculateTfIdfVectors(inputStrings, &tfidfData)
+
+	// If no categories are specified, use the default categories from the config
+	if len(categories) == 0 {
+		categories = cfg.Categories
+	}
 
 	// Load models and make predictions
 	cbmDir := filepath.Join(cfg.ModelsDir, "cbm")
-	labelsDir := filepath.Join(cfg.ModelsDir, "labels")
-	results, err := model.PredictAll(floats, rateNames, categories, cbmDir, labelsDir)
+	labelsDir := filepath.Join(cfg.ModelsDir, "labels/json")
+	results, err := model.PredictAll(floats, inputStrings, categories, cbmDir, labelsDir)
 	if err != nil {
 		fmt.Printf("Error making predictions: %v\n", err)
 		return
 	}
 
-	// Write results to CSV
-	err = utils.WriteResultsToCSV(outputFile, results, rateNames, categories)
-	if err != nil {
-		fmt.Printf("Error writing results to CSV: %v\n", err)
-		return
+	headers := append([]string{cfg.InputCol}, categories...)
+	if outputFile != "" {
+		utils.WriteCSV(outputFile, headers, inputStrings, results)
+	} else {
+		printCSVResult(headers, inputStrings, results)
+	}
+}
+
+func printCSVResult(headers []string, firstColData []string, rowData map[string]map[string]string) {
+	writer := csv.NewWriter(os.Stdout)
+	defer writer.Flush()
+
+	// Write headers
+	writer.Write(headers)
+
+	// Write data rows
+	for _, inputValue := range firstColData {
+		row := make([]string, len(headers))
+		row[0] = inputValue
+		for j := 1; j < len(headers); j++ {
+			row[j] = rowData[inputValue][headers[j]]
+		}
+		writer.Write(row)
 	}
 
-	fmt.Printf("Predictions written to %s\n", outputFile)
+	// Check for any errors during writing
+	if err := writer.Error(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error writing CSV to stdout: %v\n", err)
+	}
 }

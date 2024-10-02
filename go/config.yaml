@@ -1,4 +1,5 @@
 models_dir: "../artifacts"
+input_col: "rate_name"
 categories:
   - class
   - quality

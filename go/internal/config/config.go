@@ -7,8 +7,9 @@ import (
 )
 
 type Config struct {
-	ModelsDir     string   `mapstructure:"models_dir"`
-	Categories    []string `mapstructure:"categories"`
+	ModelsDir  string   `mapstructure:"models_dir"`
+	InputCol   string   `mapstructure:"input_col"`
+	Categories []string `mapstructure:"categories"`
 }
 
 func LoadConfig(configPath string) (*Config, error) {

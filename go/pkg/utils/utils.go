@@ -7,30 +7,55 @@ import (
 	"os"
 )
 
-func ReadRateNames(filePath string) []string {
+// ReadFirstCSVColumn reads a CSV file and returns a slice of strings for a specified column
+func ReadFirstCSVColumn(filePath string, columnName string) ([]string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
-		fmt.Printf("Error opening file: %v\n", err)
-		return nil
+		return nil, fmt.Errorf("error opening file: %v", err)
 	}
 	defer file.Close()
 
 	reader := csv.NewReader(file)
 	records, err := reader.ReadAll()
 	if err != nil {
-		fmt.Printf("Error reading CSV: %v\n", err)
-		return nil
+		return nil, fmt.Errorf("error reading CSV: %v", err)
 	}
 
-	rateNames := make([]string, len(records))
-	for i, record := range records {
-		rateNames[i] = record[0]
+	if len(records) == 0 {
+		return nil, fmt.Errorf("no records found in CSV")
 	}
 
-	return rateNames
+	if len(records[0]) == 0 {
+		return nil, fmt.Errorf("provide a valid CSV file")
+	}
+
+	// Find the index of the specified column
+	columnIndex := -1
+	for i, header := range records[0] {
+		if header == columnName {
+			columnIndex = i
+			break
+		}
+	}
+
+	if columnIndex == -1 {
+		return nil, fmt.Errorf("column '%s' not found in CSV", columnName)
+	}
+
+	columnRecords := make([]string, len(records)-1)
+	for i, record := range records[1:] {
+		if len(record) > columnIndex {
+			columnRecords[i] = record[columnIndex]
+		} else {
+			return nil, fmt.Errorf("record %d does not have enough columns", i+1)
+		}
+	}
+
+	return columnRecords, nil
 }
 
-func LoadLabels(filePath string) ([]string, error) {
+// ReadJsonStringArray loads a JSON file and returns a slice of strings
+func ReadJsonStringArray(filePath string) ([]string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("error opening file: %v", err)
@@ -46,7 +71,11 @@ func LoadLabels(filePath string) ([]string, error) {
 	return labels, nil
 }
 
-func WriteResultsToCSV(outputFile string, results map[string]map[string]string, rateNames []string, labels []string) error {
+// WriteCSV writes a CSV file with the provided headers, first column data, and row data.
+//
+// rowData is a map of the form map[string]map[string]string
+// where the keys of the outer map are the first column data and the keys of the inner map are the headers
+func WriteCSV(outputFile string, headers []string, firstColData []string, rowData map[string]map[string]string) error {
 	file, err := os.Create(outputFile)
 	if err != nil {
 		return fmt.Errorf("error creating output file: %v", err)
@@ -56,21 +85,29 @@ func WriteResultsToCSV(outputFile string, results map[string]map[string]string, 
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
 
-	header := append([]string{"rate_name"}, labels...)
-	if err := writer.Write(header); err != nil {
-		return fmt.Errorf("error writing header to CSV: %v", err)
+	writer.Write(headers)
+
+	if len(firstColData) != len(rowData) {
+		return fmt.Errorf("first column data length does not match row data length")
 	}
 
-	for _, rateName := range rateNames {
-		row := make([]string, 1+len(labels))
-		row[0] = rateName
-		for i, label := range labels {
-			row[i+1] = results[rateName][label]
+	for _, inputValue := range firstColData {
+		row := make([]string, len(headers))
+		row[0] = inputValue
+		for j := 1; j < len(headers); j++ {
+			row[j] = rowData[inputValue][headers[j]]
 		}
-		if err := writer.Write(row); err != nil {
-			return fmt.Errorf("error writing record to CSV: %v", err)
-		}
+		writer.Write(row)
 	}
 
 	return nil
+}
+
+// IsFile checks if a file exists and is not a directory
+func IsFile(path string) bool {
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return false
+	}
+	return !info.IsDir()
 }

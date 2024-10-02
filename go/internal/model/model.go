@@ -48,7 +48,7 @@ func PredictAll(floats [][]float32, namesToPredict []string, labels []string, mo
 			}
 
 			labelsPath := filepath.Join(labelsDir, fmt.Sprintf("labels_%s.json", label))
-			loadedLabels, err := utils.LoadLabels(labelsPath)
+			loadedLabels, err := utils.ReadJsonStringArray(labelsPath)
 			if err != nil {
 				mu.Lock()
 				loadingErr = fmt.Errorf("error loading labels for %s: %v", label, err)

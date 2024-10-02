@@ -39,6 +39,7 @@ func SetupRoutes(app *fiber.App) {
 
 type RateNameInput struct {
 	RateNames  []string `json:"rate_names"`
+	InputCol   string   `json:"input_col"`
 	Categories []string `json:"categories"`
 }
 
@@ -64,7 +65,9 @@ func predictRateNames(c *fiber.Ctx) error {
 	}
 
 	// Load models and make predictions
-	results, err := model.PredictAll(floats, cleanedRateNames, input.Categories, filepath.Join(cfg.ModelsDir, "cbm"), filepath.Join(cfg.ModelsDir, "labels"))
+	cbmDir := filepath.Join(cfg.ModelsDir, "cbm")
+	labelsDir := filepath.Join(cfg.ModelsDir, "labels/json")
+	results, err := model.PredictAll(floats, cleanedRateNames, input.Categories, cbmDir, labelsDir)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
