@@ -3,6 +3,7 @@ package tfidf
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"runtime"
 	"strings"
@@ -35,13 +36,35 @@ func LoadTfIdfData(filePath string) (TfIdfData, error) {
 }
 
 func CalculateTfIdfVector(rateName string, tfidfData *TfIdfData) []float32 {
-	vector := make([]float32, len(tfidfData.IdfValues))
-	rateName = stripAccents(strings.ToLower(rateName))
-	ngrams := charNGrams(rateName, 3)
+	preprocessed := strings.ToLower(stripAccents(rateName))
+	ngrams := charNGrams(preprocessed, [2]int{1, 3})
 
-	for ngram, count := range ngrams {
-		if idx, ok := tfidfData.Vocabulary[ngram]; ok {
-			vector[idx] = float32(count) * tfidfData.IdfValues[idx]
+	termCounts := make(map[string]int, len(ngrams))
+	for _, ngram := range ngrams {
+		termCounts[ngram]++
+	}
+
+	vector := make([]float32, len(tfidfData.Vocabulary))
+
+	// Compute TF-IDF
+	for term, index := range tfidfData.Vocabulary {
+		if count, exists := termCounts[term]; exists && count > 0 {
+			tf := float32(1 + math.Log(float64(count)))
+			vector[index] = tf * tfidfData.IdfValues[index]
+		} else {
+			vector[index] = 0
+		}
+	}
+
+	// Normalize the vector
+	var normVal float32
+	for _, v := range vector {
+		normVal += v * v
+	}
+	normVal = float32(math.Sqrt(float64(normVal)))
+	if normVal > 0 {
+		for i := range vector {
+			vector[i] /= normVal
 		}
 	}
 
@@ -85,12 +108,19 @@ func stripAccents(s string) string {
 	return result
 }
 
-func charNGrams(s string, n int) map[string]int {
-	ngrams := make(map[string]int)
-	runes := []rune(s)
-	for i := 0; i <= len(runes)-n; i++ {
-		ngram := string(runes[i : i+n])
-		ngrams[ngram]++
+func charNGrams(input string, ngramRange [2]int) []string {
+	ngrams := []string{}
+	words := strings.Fields(input)
+	for _, word := range words {
+		runes := []rune(" " + word + " ")
+		for n := ngramRange[0]; n <= ngramRange[1]; n++ {
+			if len(runes) < n {
+				continue
+			}
+			for i := 0; i <= len(runes)-n; i++ {
+				ngrams = append(ngrams, string(runes[i:i+n]))
+			}
+		}
 	}
 	return ngrams
 }
