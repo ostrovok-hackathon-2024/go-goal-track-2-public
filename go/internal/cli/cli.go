@@ -115,7 +115,11 @@ func runTagger(cmd *cobra.Command, args []string) {
 
 	headers := append([]string{cfg.InputCol}, categories...)
 	if outputFile != "" {
-		utils.WriteCSV(outputFile, headers, inputStrings, results)
+		err := utils.WriteCSV(outputFile, headers, inputStrings, results)
+		if err != nil {
+			fmt.Printf("Error writing CSV: %v\n", err)
+			return
+		}
 	} else {
 		printCSVResult(headers, inputStrings, results)
 	}
