@@ -1,0 +1,11 @@
+models_dir: "../artifacts"
+categories:
+  - class
+  - quality
+  - bathroom
+  - bedding
+  - capacity
+  - club
+  - bedrooms
+  - view
+  - floor

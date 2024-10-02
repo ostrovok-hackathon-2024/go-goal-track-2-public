@@ -2,63 +2,110 @@ package cli
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
-	"github.com/go-goal/tagger/internal/prediction"
-	"github.com/go-goal/tagger/internal/tui"
+	"github.com/go-goal/tagger/internal/config"
+	"github.com/go-goal/tagger/internal/model"
+	"github.com/go-goal/tagger/internal/tfidf"
+	"github.com/go-goal/tagger/pkg/utils"
 )
 
 var (
-	useTUI      bool
-	modelsDir   string
-	labelsDir   string
-	tfidfPath   string
-	inputString string
-
-	rootCmd = &cobra.Command{
-		Use:   "tagger [input string]",
-		Short: "Tagger is a tool for managing tags",
-		Long:  `A longer description of the Tagger application...`,
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			inputString = args[0]
-			if useTUI {
-				app, err := tui.NewTaggerApp(tfidfPath, labelsDir, modelsDir)
-				if err != nil {
-					return err
-				}
-				return app.Run()
-			}
-
-			// Use the prediction package for CLI mode
-			predictor, err := prediction.NewPredictor(tfidfPath, labelsDir, modelsDir)
-			if err != nil {
-				return err
-			}
-
-			results, err := predictor.Predict(inputString)
-			if err != nil {
-				return err
-			}
-
-			// Print results
-			for model, result := range results {
-				fmt.Printf("%s: %s\n", model, result)
-			}
-
-			return nil
-		},
-	}
+	cfgFile    string
+	cfg        *config.Config
+	categories []string
 )
 
-func init() {
-	rootCmd.PersistentFlags().BoolVarP(&useTUI, "tui", "t", false, "Start the Text User Interface (TUI)")
-	rootCmd.PersistentFlags().StringVar(&modelsDir, "models", "models_better/cbm", "Directory containing models")
-	rootCmd.PersistentFlags().StringVar(&labelsDir, "labels", "models_better/labels", "Directory containing labels")
-	rootCmd.PersistentFlags().StringVar(&tfidfPath, "tfidf", "models_better/tfidf/tfidf_data.json", "Path to TF-IDF data file")
+var rootCmd = &cobra.Command{
+	Use:   "tagger",
+	Short: "A CLI tool for tagging rate names",
+	Long:  `Tagger is a CLI tool that uses machine learning models to tag rate names with various attributes.`,
+	Run:   runTagger,
 }
 
 func Execute() error {
 	return rootCmd.Execute()
+}
+
+func init() {
+	cobra.OnInitialize(initConfig)
+
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ./config.yaml)")
+	rootCmd.Flags().StringP("input", "i", "", "Input CSV file containing strings to classify")
+	rootCmd.Flags().StringP("output", "o", "predictions.csv", "Output CSV file for predictions")
+	rootCmd.Flags().StringP("tfidf", "t", "", "TF-IDF data file")
+	rootCmd.Flags().StringSliceVarP(&categories, "category", "c", []string{}, "Categories to predict (can be specified multiple times)")
+}
+
+func initConfig() {
+	if cfgFile != "" {
+		viper.SetConfigFile(cfgFile)
+	} else {
+		viper.AddConfigPath(".")
+		viper.SetConfigName("config")
+	}
+
+	viper.AutomaticEnv()
+
+	if err := viper.ReadInConfig(); err != nil {
+		fmt.Printf("Error reading config: %v\n", err)
+		os.Exit(1)
+	}
+
+	var err error
+	cfg, err = config.LoadConfig(viper.ConfigFileUsed())
+	if err != nil {
+		fmt.Printf("Error loading config: %v\n", err)
+		return
+	}
+}
+
+func runTagger(cmd *cobra.Command, args []string) {
+	inputFile, _ := cmd.Flags().GetString("input")
+	outputFile, _ := cmd.Flags().GetString("output")
+	tfidfFile, _ := cmd.Flags().GetString("tfidf")
+
+	if inputFile == "" {
+		fmt.Println("Error: input file is required")
+		return
+	}
+
+	// Load TF-IDF data
+	if tfidfFile == "" {
+		tfidfFile = filepath.Join(cfg.ModelsDir, "tfidf", "tfidf_data.json")
+
+	}
+	tfidfData, err := tfidf.LoadTfIdfData(tfidfFile)
+	if err != nil {
+		fmt.Printf("Error loading TF-IDF data: %v\n", err)
+		return
+	}
+
+	// Read rate names
+	rateNames := utils.ReadRateNames(inputFile)[1:]
+
+	// Calculate TF-IDF vectors
+	floats := tfidf.CalculateTfIdfVectors(rateNames, &tfidfData)
+
+	// Load models and make predictions
+	cbmDir := filepath.Join(cfg.ModelsDir, "cbm")
+	labelsDir := filepath.Join(cfg.ModelsDir, "labels")
+	results, err := model.PredictAll(floats, rateNames, categories, cbmDir, labelsDir)
+	if err != nil {
+		fmt.Printf("Error making predictions: %v\n", err)
+		return
+	}
+
+	// Write results to CSV
+	err = utils.WriteResultsToCSV(outputFile, results, rateNames, categories)
+	if err != nil {
+		fmt.Printf("Error writing results to CSV: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Predictions written to %s\n", outputFile)
 }
