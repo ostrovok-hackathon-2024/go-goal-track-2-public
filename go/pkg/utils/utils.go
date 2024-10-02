@@ -4,7 +4,11 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 // ReadFirstCSVColumn reads a CSV file and returns a slice of strings for a specified column
@@ -85,7 +89,6 @@ func WriteCSV(outputFile string, headers []string, firstColData []string, rowDat
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
 
-
 	writer.Write(headers)
 
 	for _, inputValue := range firstColData {
@@ -107,4 +110,138 @@ func IsFile(path string) bool {
 		return false
 	}
 	return !info.IsDir()
+}
+
+// WriteOutput writes the output in the specified format
+func WriteOutput(outputFile, format string, headers []string, firstColData []string, rowData map[string]map[string]string) error {
+	switch strings.ToLower(format) {
+	case "csv":
+		return WriteCSV(outputFile, headers, firstColData, rowData)
+	case "json":
+		return WriteJSON(outputFile, headers, firstColData, rowData)
+	case "tsv":
+		return WriteTSV(outputFile, headers, firstColData, rowData)
+	case "yaml":
+		return WriteYAML(outputFile, headers, firstColData, rowData)
+	default:
+		return fmt.Errorf("unsupported format: %s", format)
+	}
+}
+
+// PrintCSV prints CSV data to the given writer
+func PrintCSV(w io.Writer, headers []string, firstColData []string, rowData map[string]map[string]string) {
+	writer := csv.NewWriter(w)
+	defer writer.Flush()
+
+	writer.Write(headers)
+
+	for _, inputValue := range firstColData {
+		row := make([]string, len(headers))
+		row[0] = inputValue
+		for j := 1; j < len(headers); j++ {
+			row[j] = rowData[inputValue][headers[j]]
+		}
+		writer.Write(row)
+	}
+}
+
+// PrintJSON prints JSON data to the given writer
+func PrintJSON(w io.Writer, headers []string, firstColData []string, rowData map[string]map[string]string) {
+	data := prepareOutputData(headers, firstColData, rowData)
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	encoder.Encode(data)
+}
+
+// PrintTSV prints TSV data to the given writer
+func PrintTSV(w io.Writer, headers []string, firstColData []string, rowData map[string]map[string]string) {
+	writer := csv.NewWriter(w)
+	writer.Comma = '\t'
+	defer writer.Flush()
+
+	writer.Write(headers)
+
+	for _, inputValue := range firstColData {
+		row := make([]string, len(headers))
+		row[0] = inputValue
+		for j := 1; j < len(headers); j++ {
+			row[j] = rowData[inputValue][headers[j]]
+		}
+		writer.Write(row)
+	}
+}
+
+// PrintYAML prints YAML data to the given writer
+func PrintYAML(w io.Writer, headers []string, firstColData []string, rowData map[string]map[string]string) {
+	data := prepareOutputData(headers, firstColData, rowData)
+	encoder := yaml.NewEncoder(w)
+	encoder.Encode(data)
+}
+
+// WriteJSON writes JSON data to a file
+func WriteJSON(outputFile string, headers []string, firstColData []string, rowData map[string]map[string]string) error {
+	file, err := os.Create(outputFile)
+	if err != nil {
+		return fmt.Errorf("error creating output file: %v", err)
+	}
+	defer file.Close()
+
+	data := prepareOutputData(headers, firstColData, rowData)
+	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(data)
+}
+
+// WriteTSV writes TSV data to a file
+func WriteTSV(outputFile string, headers []string, firstColData []string, rowData map[string]map[string]string) error {
+	file, err := os.Create(outputFile)
+	if err != nil {
+		return fmt.Errorf("error creating output file: %v", err)
+	}
+	defer file.Close()
+
+	writer := csv.NewWriter(file)
+	writer.Comma = '\t'
+	defer writer.Flush()
+
+	writer.Write(headers)
+
+	for _, inputValue := range firstColData {
+		row := make([]string, len(headers))
+		row[0] = inputValue
+		for j := 1; j < len(headers); j++ {
+			row[j] = rowData[inputValue][headers[j]]
+		}
+		writer.Write(row)
+	}
+
+	return nil
+}
+
+// WriteYAML writes YAML data to a file
+func WriteYAML(outputFile string, headers []string, firstColData []string, rowData map[string]map[string]string) error {
+	file, err := os.Create(outputFile)
+	if err != nil {
+		return fmt.Errorf("error creating output file: %v", err)
+	}
+	defer file.Close()
+
+	data := prepareOutputData(headers, firstColData, rowData)
+	encoder := yaml.NewEncoder(file)
+	return encoder.Encode(data)
+}
+
+
+// prepareOutputData prepares the data for JSON and YAML output
+func prepareOutputData(headers []string, firstColData []string, rowData map[string]map[string]string) []map[string]string {
+	var data []map[string]string
+	for _, inputValue := range firstColData {
+		row := make(map[string]string)
+		row[headers[0]] = inputValue
+		for j := 1; j < len(headers); j++ {
+			row[headers[j]] = rowData[inputValue][headers[j]]
+		}
+		data = append(data, row)
+	}
+	return data
 }

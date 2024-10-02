@@ -38,8 +38,7 @@ func SetupRoutes(app *fiber.App) {
 }
 
 type RateNameInput struct {
-	RateNames  []string `json:"rate_names"`
-	InputCol   string   `json:"input_col"`
+	RateNames  []string `json:"inputs"`
 	Categories []string `json:"categories"`
 }
 

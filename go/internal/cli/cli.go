@@ -1,10 +1,10 @@
 package cli
 
 import (
-	"encoding/csv"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -39,6 +39,7 @@ func init() {
 	rootCmd.Flags().StringP("input", "i", "", "Input CSV file containing strings to classify or a single string to classify")
 	rootCmd.Flags().StringP("output", "o", "", "Output CSV file for predictions")
 	rootCmd.Flags().StringSliceVarP(&categories, "category", "c", []string{}, "Categories to predict (can be specified multiple times)")
+	rootCmd.Flags().StringP("format", "f", "csv", "Output format (csv, json, tsv, yaml)")
 }
 
 func initConfig() {
@@ -67,6 +68,7 @@ func initConfig() {
 func runTagger(cmd *cobra.Command, args []string) {
 	inputFile, _ := cmd.Flags().GetString("input")
 	outputFile, _ := cmd.Flags().GetString("output")
+	outputFormat, _ := cmd.Flags().GetString("format")
 
 	if inputFile == "" {
 		fmt.Println("Error: input is required")
@@ -119,35 +121,27 @@ func runTagger(cmd *cobra.Command, args []string) {
 
 	headers := append([]string{cfg.InputCol}, categories...)
 	if outputFile != "" {
-		err := utils.WriteCSV(outputFile, headers, inputStrings, results)
+		err := utils.WriteOutput(outputFile, outputFormat, headers, inputStrings, results)
 		if err != nil {
-			fmt.Printf("Error writing CSV: %v\n", err)
+			fmt.Printf("Error writing output: %v\n", err)
 			return
 		}
 	} else {
-		printCSVResult(headers, inputStrings, results)
+		printResult(outputFormat, headers, inputStrings, results)
 	}
 }
 
-func printCSVResult(headers []string, firstColData []string, rowData map[string]map[string]string) {
-	writer := csv.NewWriter(os.Stdout)
-	defer writer.Flush()
-
-	// Write headers
-	writer.Write(headers)
-
-	// Write data rows
-	for _, inputValue := range firstColData {
-		row := make([]string, len(headers))
-		row[0] = inputValue
-		for j := 1; j < len(headers); j++ {
-			row[j] = rowData[inputValue][headers[j]]
-		}
-		writer.Write(row)
-	}
-
-	// Check for any errors during writing
-	if err := writer.Error(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error writing CSV to stdout: %v\n", err)
+func printResult(format string, headers []string, firstColData []string, rowData map[string]map[string]string) {
+	switch strings.ToLower(format) {
+	case "csv":
+		utils.PrintCSV(os.Stdout, headers, firstColData, rowData)
+	case "json":
+		utils.PrintJSON(os.Stdout, headers, firstColData, rowData)
+	case "tsv":
+		utils.PrintTSV(os.Stdout, headers, firstColData, rowData)
+	case "yaml":
+		utils.PrintYAML(os.Stdout, headers, firstColData, rowData)
+	default:
+		fmt.Printf("Unsupported format: %s\n", format)
 	}
 }
