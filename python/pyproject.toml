@@ -24,6 +24,7 @@ uvicorn = "^0.24.0"
 python-multipart = "^0.0.9"
 pyarrow = "^14.0.0"
 tenacity = "^8.3.0"
+fastapi = "^0.115.0"
 
 [tool.poetry.group.server]
 optional = true
