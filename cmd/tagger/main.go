@@ -7,6 +7,7 @@ import (
 	"log"
 	"math"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"unicode"
@@ -29,8 +30,8 @@ import "C"
 const Eps float64 = 1e-8
 
 type TfIdfData struct {
-	Vocabulary map[string]int `json:"vocabulary"`
-	IdfValues  []float64      `json:"idf_values"`
+	Vocabulary map[string]int32 `json:"vocabulary"` // Change int to int32
+	IdfValues  []float32        `json:"idf_values"` // Change float64 to float32
 }
 
 func stripAccents(input string) string {
@@ -74,23 +75,16 @@ func sublinearTermFrequency(term string, document string) float64 {
 	return 0
 }
 
-func CalculateTfIdfVector(rateName string, tfidfData TfIdfData) []float32 {
+func CalculateTfIdfVector(rateName string, tfidfData *TfIdfData) []float32 {
 	preprocessed := strings.ToLower(stripAccents(rateName))
 	ngrams := charNGrams(preprocessed, [2]int{1, 3})
-
-	termCounts := make(map[string]int, len(ngrams))
-	for _, ngram := range ngrams {
-		termCounts[ngram]++
-	}
 
 	vector := make([]float32, len(tfidfData.Vocabulary))
 
 	// Compute TF-IDF
-	for term, index := range tfidfData.Vocabulary {
-		if count, exists := termCounts[term]; exists && count > 0 {
-			vector[index] = float32((1 + math.Log(float64(count))) * tfidfData.IdfValues[index])
-		} else {
-			vector[index] = 0
+	for _, ngram := range ngrams {
+		if index, exists := tfidfData.Vocabulary[ngram]; exists {
+			vector[index] += tfidfData.IdfValues[index]
 		}
 	}
 
@@ -109,22 +103,26 @@ func CalculateTfIdfVector(rateName string, tfidfData TfIdfData) []float32 {
 	return vector
 }
 
-func CalculateTfIdfVectors(rateNames []string, tfidfData TfIdfData) [][]float32 {
+func CalculateTfIdfVectors(rateNames []string, tfidfData *TfIdfData) [][]float32 {
 	vectors := make([][]float32, len(rateNames))
+	numWorkers := runtime.NumCPU()
+	jobs := make(chan int, len(rateNames))
 	var wg sync.WaitGroup
-	wg.Add(len(rateNames))
 
-	// Limit concurrency
-	workerPool := make(chan struct{}, 8) // Adjust based on CPU cores
-
-	for i, rateName := range rateNames {
-		go func(i int, rateName string) {
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func() {
 			defer wg.Done()
-			workerPool <- struct{}{}
-			vectors[i] = CalculateTfIdfVector(rateName, tfidfData)
-			<-workerPool
-		}(i, rateName)
+			for j := range jobs {
+				vectors[j] = CalculateTfIdfVector(rateNames[j], tfidfData)
+			}
+		}()
 	}
+
+	for i := range rateNames {
+		jobs <- i
+	}
+	close(jobs)
 
 	wg.Wait()
 	return vectors
@@ -228,7 +226,7 @@ func main() {
 
 	rateNames := ReadRateNames("rates_dirty.csv")[1:]
 
-	floats := CalculateTfIdfVectors(rateNames, tfidfData)
+	floats := CalculateTfIdfVectors(rateNames, &tfidfData)
 
 	floatsC := cb.MakeFloatArray2D(floats)
 	defer C.free(unsafe.Pointer(floatsC))
@@ -244,47 +242,75 @@ func main() {
 		}
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(len(labels))
+	fmt.Println("Loading models and labels")
 
-	fmt.Println("Starting predictions")
+	// Preload all models and labels concurrently
+	type modelData struct {
+		model  *cb.Model
+		labels []string
+	}
+	models := make(map[string]modelData, len(labels))
+	var modelWg sync.WaitGroup
+	var loadingErr error
+	var errMutex sync.Mutex
+	var modelsMutex sync.Mutex
 
-	// Preload all models and labels
-	models := make(map[string]cb.Model, len(labels))
-	labelsMap := make(map[string][]string, len(labels))
 	for _, label := range labels {
-		modelPath := fmt.Sprintf("data/cbm/catboost_model_%v.cbm", label)
-		model, err := cb.LoadFullModelFromFile(modelPath)
-		if err != nil {
-			fmt.Printf("Error loading model for %v: %v\n", label, err)
-			continue
-		}
-		models[label] = *model
+		modelWg.Add(1)
+		go func(label string) {
+			defer modelWg.Done()
+			modelPath := fmt.Sprintf("data/cbm/catboost_model_%v.cbm", label)
+			model, err := cb.LoadFullModelFromFile(modelPath)
+			if err != nil {
+				errMutex.Lock()
+				loadingErr = fmt.Errorf("error loading model for %v: %v", label, err)
+				errMutex.Unlock()
+				return
+			}
 
-		labelsPath := fmt.Sprintf("data/labels/labels_%v.json", label)
-		loadedLabels, err := LoadLabels(labelsPath)
-		if err != nil {
-			fmt.Printf("Error loading labels for %v: %v\n", label, err)
-			continue
-		}
-		labelsMap[label] = loadedLabels
+			labelsPath := fmt.Sprintf("data/labels/labels_%v.json", label)
+			loadedLabels, err := LoadLabels(labelsPath)
+			if err != nil {
+				errMutex.Lock()
+				loadingErr = fmt.Errorf("error loading labels for %v: %v", label, err)
+				errMutex.Unlock()
+				return
+			}
+
+			modelsMutex.Lock()
+			models[label] = modelData{model: model, labels: loadedLabels}
+			modelsMutex.Unlock()
+		}(label)
 	}
 
+	modelWg.Wait()
+
+	if loadingErr != nil {
+		fmt.Printf("Error loading models or labels: %v\n", loadingErr)
+		return
+	}
+
+	fmt.Println("All models and labels loaded successfully")
+	fmt.Println("Starting predictions")
+
 	var resultsMutex sync.Mutex
+	var predictionWg sync.WaitGroup
+	predictionWg.Add(len(labels))
 
 	for _, label := range labels {
 		go func(label string) {
-			defer wg.Done()
-			model, exists := models[label]
+			defer predictionWg.Done()
+
+			modelsMutex.Lock()
+			md, exists := models[label]
+			modelsMutex.Unlock()
+
 			if !exists {
-				return
-			}
-			classLabels, exists := labelsMap[label]
-			if !exists {
+				fmt.Printf("Model data not found for label: %v\n", label)
 				return
 			}
 
-			predicted, err := LoadModelAndPredict(model, unsafe.Pointer(floatsC), len(floats))
+			predicted, err := LoadModelAndPredict(*md.model, unsafe.Pointer(floatsC), len(floats))
 			if err != nil {
 				fmt.Printf("Error predicting for label %v: %v\n", label, err)
 				return
@@ -293,17 +319,17 @@ func main() {
 			fmt.Printf("Predicting for %v\n", label)
 
 			predictions := make([]string, len(rateNames))
-			if len(classLabels) == 2 {
+			if len(md.labels) == 2 {
 				for i, logit := range predicted {
 					probability := 1.0 / (1.0 + math.Exp(-logit))
 					if probability >= 0.5 {
-						predictions[i] = classLabels[1]
+						predictions[i] = md.labels[1]
 					} else {
-						predictions[i] = classLabels[0]
+						predictions[i] = md.labels[0]
 					}
 				}
 			} else {
-				numClasses := len(classLabels)
+				numClasses := len(md.labels)
 				for i := 0; i < len(rateNames); i++ {
 					start := i * numClasses
 					end := start + numClasses
@@ -314,7 +340,7 @@ func main() {
 					}
 					logits := predicted[start:end]
 					probs := softmax(logits)
-					predictions[i] = classLabels[argmax(probs)]
+					predictions[i] = md.labels[argmax(probs)]
 				}
 			}
 
@@ -326,7 +352,7 @@ func main() {
 		}(label)
 	}
 
-	wg.Wait()
+	predictionWg.Wait()
 
 	// Write results to CSV
 	outputFile, err := os.Create("predictions.csv")
