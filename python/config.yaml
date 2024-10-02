@@ -1,12 +1,11 @@
-models_dir: "artifacts/models"
+models_dir: "../artifacts"
 categories:
-  - capacity
-  - quality
-  - view
-  - bedding
-  - balcony
-  - bedrooms
-  - club
-  - floor
-  - bathroom
   - class
+  - quality
+  - bathroom
+  - bedding
+  - capacity
+  - club
+  - bedrooms
+  - view
+  - floor
