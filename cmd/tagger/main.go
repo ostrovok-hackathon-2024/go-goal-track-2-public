@@ -75,54 +75,21 @@ func sublinearTermFrequency(term string, document string) float64 {
 	return 0
 }
 
-// func CalculateTfIdfVector(rateName string, tfidfData *TfIdfData) []float32 {
-// 	preprocessed := strings.ToLower(stripAccents(rateName))
-// 	ngrams := charNGrams(preprocessed, [2]int{1, 3})
-
-// 	vector := make([]float32, len(tfidfData.Vocabulary))
-
-// 	// Compute TF-IDF
-// 	for _, ngram := range ngrams {
-// 		if index, exists := tfidfData.Vocabulary[ngram]; exists && index > 0 {
-// 			vector[index] += tfidfData.IdfValues[index]
-// 		} else {
-// 			vector[index] = 0
-// 		}
-// 	}
-
-// 	// Normalize the vector
-// 	var normVal float32
-// 	for _, v := range vector {
-// 		normVal += v * v
-// 	}
-// 	normVal = float32(math.Sqrt(float64(normVal)))
-// 	if normVal > 0 {
-// 		for i := range vector {
-// 			vector[i] /= normVal
-// 		}
-// 	}
-
-// 	return vector
-// }
-
 func CalculateTfIdfVector(rateName string, tfidfData *TfIdfData) []float32 {
 	preprocessed := strings.ToLower(stripAccents(rateName))
 	ngrams := charNGrams(preprocessed, [2]int{1, 3})
-
-	termCounts := make(map[string]int, len(ngrams))
-	for _, ngram := range ngrams {
-		termCounts[ngram]++
-	}
-
 	vector := make([]float32, len(tfidfData.Vocabulary))
 
+	// Count term frequencies
+	termFreq := make(map[string]int)
+	for _, ngram := range ngrams {
+		termFreq[ngram]++
+	}
+
 	// Compute TF-IDF
-	for term, index := range tfidfData.Vocabulary {
-		if count, exists := termCounts[term]; exists && count > 0 {
-			tf := float32(1 + math.Log(float64(count)))
-			vector[index] = tf * tfidfData.IdfValues[index]
-		} else {
-			vector[index] = 0
+	for ngram, tf := range termFreq {
+		if index, exists := tfidfData.Vocabulary[ngram]; exists && index >= 0 && index < int32(len(vector)) {
+			vector[index] = float32(tf) * tfidfData.IdfValues[index]
 		}
 	}
 
