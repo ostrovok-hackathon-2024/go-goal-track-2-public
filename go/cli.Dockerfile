@@ -1,14 +1,12 @@
-FROM debian:latest
+FROM alpine:latest
 
 # Install Go and required dependencies
-RUN apt-get update && apt-get install -y \
-    golang-1.19 \
-    libc6 \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache gcc go=1.22.7-r0 libc6-compat musl-dev
 
+RUN apk --no-cache add ca-certificates
 
 # Set Go environment variables
-ENV PATH="/usr/lib/go-1.19/bin:${PATH}"
+ENV PATH="/usr/local/go/bin:${PATH}"
 ENV GOPATH="/go"
 ENV PATH="${GOPATH}/bin:${PATH}"
 
