@@ -40,14 +40,14 @@ Only specified categories will be used for prediction.
 ### Basic Usage
 
 ```bash
-tagger --input <input_file_or_string> [flags]
+poetry run cli --input <input_file_or_string> [flags]
 ```
 
 ### Flags
 
 - `--input`, `-i`: Input CSV file containing strings to classify or a single string to classify (required)
 - `--output`, `-o`: Output file for predictions (optional)
-- `--category`, `-c`: Categories to output
+- `--categories`, `-c`: Categories to output
 - `--format`, `-f`: Output format (csv, json, tsv, yaml, parquet) (default: csv)
 - `--config`: Config file (default is ./config.yaml)
 
@@ -56,25 +56,25 @@ tagger --input <input_file_or_string> [flags]
 1. Classify a single string:
 
 ```bash
-tagger --input "Example Rate Name"
+poetry run cli --input "Example Rate Name"
 ```
 
 2. Process a CSV file and output results to another file:
 
 ```bash
-tagger --input input.csv --output results.csv
+poetry run cli --input input.csv --output results.csv
 ```
 
 3. Specify custom categories and output format:
 
 ```bash
-tagger --input input.csv --category Category1 --format json
+poetry run cli --input input.csv --categories Category1 --format json
 ```
 
 4. Use a custom configuration file:
 
 ```bash
-tagger --config custom_config.yaml --input input.csv
+poetry run cli --config custom_config.yaml --input input.csv
 ```
 
 ## Output

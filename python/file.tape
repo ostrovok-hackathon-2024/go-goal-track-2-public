@@ -1,4 +1,4 @@
-Output demo.gif
+Output file.gif
 
 Set FontSize 22
 Set Width 1200
@@ -12,18 +12,4 @@ Sleep 200ms
 
 Enter
 
-Sleep 10s
-
-Hide
-Type "clear"
-Enter
-
-Show
-
-Type "poetry run cli -i ../inputs/rates_short.csv | xsv table"
-
-Sleep 200ms
-
-Enter
-
-Sleep 10s
+Sleep 8s

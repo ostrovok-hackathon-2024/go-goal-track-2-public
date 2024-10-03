@@ -6,7 +6,7 @@ Set Height 800
 Set Shell zsh
 Set Theme "Catppuccin Frappe"
 
-Type "poetry run cli -i 'Standard - Double Room - With Breakfast' | xsv table"
+Type "go run cmd/cli/main.go -i 'Standard - Double Room - With Breakfast' | xsv table"
 
 Sleep 200ms
 
@@ -20,7 +20,7 @@ Enter
 
 Show
 
-Type "poetry run cli -i ../inputs/rates_short.csv | xsv table"
+Type "go run cmd/cli/main.go -i ../inputs/rates_short.csv | xsv table"
 
 Sleep 200ms
 
