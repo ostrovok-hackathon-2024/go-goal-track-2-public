@@ -8,7 +8,7 @@ class RateNameInput(BaseModel):
         alias="rate_names",
         description="List of rate names to predict",
         min_items=1,
-        example=["Deluxe Ocean View", "Standard Room"]
+        example=["Deluxe Ocean View", "Standard Room"],
     )
     categories: Optional[List[str]] = Field(
         alias="categories",
@@ -17,5 +17,5 @@ class RateNameInput(BaseModel):
         min_items=1,
         max_items=len(settings.CATEGORIES),
         example=["capacity", "view", "bedding"],
-        enum=settings.CATEGORIES
+        enum=settings.CATEGORIES,
     )

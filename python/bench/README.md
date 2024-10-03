@@ -26,6 +26,8 @@ Or use [your](https://github.com/sharkdp/hyperfine) package manager.
 | 2         | `poetry run cli --verbose predict ./notebooks/rates_dirty.csv -o o.txt -f csv`     | 6.890 s ± 0.112 s [User: 17.928 s, System: 2.769 s] | 6.795 s … 7.163 s | 10   |
 | 3         | `poetry run cli --verbose predict ./notebooks/rates_dirty.csv -o o.txt -f parquet` | 6.672 s ± 0.196 s [User: 17.698 s, System: 2.729 s] | 6.482 s … 7.132 s | 10   |
 
+Full results can be found [here](./benchmark_dirty.json)
+
 ## Notes
 
 Benchmarks were run on a machine with the following configuration:

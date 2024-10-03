@@ -15,13 +15,15 @@ Tagger uses a configuration file (default: `config.yaml`) to set up various para
 Example `config.yaml`:
 
 ```yaml
-modelsDir: "./models"
+modelsDir: "../artifacts"
 inputCol: "RateName"
 categories:
   - "Category1"
   - "Category2"
   - "Category3"
 ```
+
+Only specified categories will be used for prediction.
 
 ## Usage
 
