@@ -1,0 +1,6 @@
+rate_name,class,quality,bathroom,bedding,capacity,club,bedrooms,balcony,view,floor
+Standard - Double Room - With Breakfast,room,standard,private bathroom,double/double-or-twin,double,not club,,no balcony,,
+6 Bed Non AC Mixed Dorm (1 Twin Bunk Bed),dorm,,shared bathroom,,,not club,,no balcony,,
+Standard Twin Room non-smoking,room,standard,private bathroom,twin/twin-or-double,double,not club,,no balcony,,
+"Deluxe Suite, Single or Double/Twin Bed",suite,deluxe,private bathroom,double/double-or-twin,single,not club,,no balcony,,
+King Premium Mountain View,room,premium,private bathroom,,,not club,,no balcony,mountain view,

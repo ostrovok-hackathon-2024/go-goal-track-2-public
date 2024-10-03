@@ -1,0 +1,13 @@
+models_dir: "../artifacts"
+input_col: "rate_name"
+categories:
+  - class
+  - quality
+  - bathroom
+  - bedding
+  - capacity
+  - club
+  - bedrooms
+  - view
+  - balcony
+  - floor

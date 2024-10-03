@@ -1,0 +1,27 @@
+name: Track 2 Sanity Check
+run-name: Checking if the task works according to spec
+on: [push]
+jobs:
+  build-and-run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Download files
+        run: |
+          mkdir data
+          curl https://ostrovok.tech/hackathon/data/track_2/sanity_check_in.csv -o data/sanity_check_in.csv
+      - name: Build Docker image
+        run: |
+          docker build -t ${GITHUB_REPOSITORY} -f ./python/cli.Dockerfile .
+      - name: Run the solution
+        run: |
+          docker run -v ${PWD}/data:/opt/data -t ${GITHUB_REPOSITORY} \
+            -i /opt/data/sanity_check_in.csv \
+            > result.csv
+      - name: Validate output
+        run: |
+          # check that the resulting file has more than 1 row
+          if [ $(cat result.csv | wc -l | bc) -gt 1 ]; then exit 0; else exit 1; fi;
+          # check that the first row contains heading as defined in sanity_check_in.csv
+          if [ $(head -1 result.csv | sed 's/\n//' | sed 's/\r//') = "rate_name,class,quality,bathroom,bedding,capacity,club,balcony,view" ]; then exit 0; else exit 1; fi
