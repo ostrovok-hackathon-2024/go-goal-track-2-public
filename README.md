@@ -18,6 +18,35 @@
 >
 > Мы предлагаем высокоскоростные варианты реализации как на Python, так и на Go, с возможностью дальнейшей оптимизации стоимости использования.
 
+```mermaid
+sequenceDiagram
+    participant CLI
+    participant API
+    participant Backend
+    participant Classifier1
+    participant Classifier2
+    participant ... as ...
+    participant ClassifierN
+
+    CLI->>API: Request
+    API->>Backend: Process request
+    
+    par Parallel classification
+        Backend->>Classifier1: Classify
+        Backend->>Classifier2: Classify
+        Backend-->>...: Classify
+        Backend->>ClassifierN: Classify
+    end
+
+    Classifier1-->>Backend: Result
+    Classifier2-->>Backend: Result
+    ...-->>Backend: Results
+    ClassifierN-->>Backend: Result
+    
+    Backend-->>API: Aggregated results
+    API-->>CLI: Response
+```
+
 ### Важно! Используется строгий нейминг для моделей и лейблов.
 
 Должны соответствовать следующему формату: `catboost_model_<category>.cbm`, `labels_<category>.json`, `label_encoder_<category>.npy`.
