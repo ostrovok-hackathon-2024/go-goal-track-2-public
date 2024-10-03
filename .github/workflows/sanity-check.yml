@@ -1,7 +1,6 @@
 name: Track 2 Sanity Check
 run-name: Checking if the task works according to spec
-on:
-  workflow_call:
+on: [push]
 jobs:
   build-and-run:
     runs-on: ubuntu-latest
