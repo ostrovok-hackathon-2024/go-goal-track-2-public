@@ -1,14 +1,16 @@
-FROM golang:1.23.1 AS builder
+FROM golang:1.23.1
 
-WORKDIR /build
+# Set destination for COPY
+WORKDIR /app
 
-COPY . .
+# Download Go modules
+COPY go.mod go.sum ./
 RUN go mod download
 
-RUN go build -ldflags="-s -w" -o main ./cmd/cli/main.go
+COPY . .
 
-FROM alpine:latest
+# Build
+RUN GOOS=linux go build -o /usr/local/bin/cli ./cmd/cli/main.go
 
-COPY --from=builder ["/build/main", "/"]
-
-ENTRYPOINT ["./main"]
+# Run
+ENTRYPOINT ["cli"]

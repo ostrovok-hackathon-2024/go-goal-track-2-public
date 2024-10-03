@@ -1,19 +1,18 @@
-FROM golang:1.23.1 AS builder
+FROM golang:1.23.1
 
-WORKDIR /build
+# Set destination for COPY
+WORKDIR /app
 
-COPY --from=root . .
+# Download Go modules
+COPY go.mod go.sum ./
 RUN go mod download
 
-RUN go build -ldflags="-s -w" -o main ./cmd/api/main.go
+COPY . .
+COPY ../artifacts ./artifacts
 
-FROM alpine:latest
+# Build
+RUN GOOS=linux go build -o /usr/local/bin/api ./cmd/api/main.go
 
-RUN apk --no-cache add ca-certificates
 
-COPY --from=builder ["/build/main", "/"]
-
-CMD ["openssl req -config example-com.conf -new -x509 -sha256 -newkey rsa:2048 -nodes \
-    -keyout example-com.key.pem -days 365 -out example-com.cert.pem"]
-
-ENTRYPOINT ["./main"]
+# Run
+ENTRYPOINT ["api"]
