@@ -8,7 +8,6 @@ from typing import List, Dict, Any, Optional, Tuple
 import click
 import pandas as pd
 from rich.console import Console
-from rich.table import Table
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -79,12 +78,6 @@ def make_prediction(
     default="config.yaml",
 )
 @click.option("--verbose", "-v", is_flag=True, help="Enable verbose output")
-@click.option(
-    "--output-categories",
-    "-oc",
-    multiple=True,
-    help="Specify categories to include in the output",
-)
 def cli(
     input: str,
     categories: Tuple[str, ...],
@@ -92,7 +85,6 @@ def cli(
     format: str,
     config: str,
     verbose: bool,
-    output_categories: Tuple[str, ...],
 ) -> None:
     """Hotel room rate classification CLI"""
     settings = load_settings(config)
@@ -104,9 +96,6 @@ def cli(
         console.print(f"[blue]Categories: {settings.CATEGORIES}[/blue]")
 
     categories_list: Optional[List[str]] = list(categories) if categories else None
-    output_categories_list: Optional[List[str]] = (
-        list(output_categories) if output_categories else None
-    )
 
     if os.path.isfile(input):
         input_stream = open(input, "r")
@@ -124,7 +113,6 @@ def cli(
             categories_list,
             format,
             verbose,
-            output_categories_list,
         )
     finally:
         if isinstance(input_stream, IOBase):
@@ -140,7 +128,6 @@ def process_data(
     categories: Optional[List[str]],
     format: str,
     verbose: bool,
-    output_categories: Optional[List[str]],
 ):
     if isinstance(input_stream, StringIO):
         inputs = [input_stream.getvalue().strip()]
@@ -152,12 +139,6 @@ def process_data(
         if verbose:
             console.print(f"[blue]Processing {len(inputs)} entries...[/blue]")
         results = make_prediction(model_registry, inputs, categories)
-
-        if output_categories:
-            results = [
-                {k: v for k, v in result.items() if k in output_categories}
-                for result in results
-            ]
 
         writer = _get_writer(output_stream, format, results[0].keys())
         _write_results(writer, results, format, output_stream)
@@ -213,81 +194,6 @@ def _get_partial_results(inputs: List[str]) -> List[Dict[str, Any]]:
         {"input": input, "predicted_category": "UNKNOWN", "confidence": 0.0}
         for input in inputs
     ]
-
-
-def _prepare_output_path(output: str, format: str) -> str:
-    file_name, file_ext = os.path.splitext(output)
-    if file_ext.lower() != f".{format}":
-        return f"{file_name}.{format}"
-    return output
-
-
-def _save_results(results: List[Dict[str, Any]], output_path: str, format: str) -> None:
-    """Save results to a file in the specified format."""
-    if format == "json":
-        with open(output_path, "w") as f:
-            json.dump(results, f, indent=2)
-    elif format == "csv":
-        with open(output_path, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=results[0].keys())
-            writer.writeheader()
-            writer.writerows(results)
-    elif format == "tsv":
-        with open(output_path, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=results[0].keys(), delimiter="\t")
-            writer.writeheader()
-            writer.writerows(results)
-    elif format == "yaml":
-        with open(output_path, "w") as f:
-            yaml.dump(results, f)
-    elif format == "parquet":
-        df: pd.DataFrame = pd.DataFrame(results)
-        table: pa.Table = pa.Table.from_pandas(df)
-        pq.write_table(table, output_path)
-
-
-def _display_results(results: List[Dict[str, Any]], format: str) -> None:
-    """Display results in the specified format to stdout."""
-    if not results:
-        console.print("[yellow]No results to display.[/yellow]")
-        return
-
-    if format == "json":
-        console.print(json.dumps(results, indent=2))
-    elif format in ["csv", "tsv"]:
-        delimiter = "," if format == "csv" else "\t"
-        output = StringIO()
-        writer = csv.DictWriter(
-            output, fieldnames=results[0].keys(), delimiter=delimiter
-        )
-        writer.writeheader()
-        writer.writerows(results)
-        console.print(output.getvalue())
-    elif format == "yaml":
-        console.print(yaml.dump(results))
-    elif format == "parquet":
-        console.print(
-            "[yellow]Parquet format is not supported for stdout display.[/yellow]"
-        )
-        console.print(
-            "[yellow]Please specify an output file to save in Parquet format.[/yellow]"
-        )
-    else:
-        _display_results_table(results)
-
-
-def _display_results_table(results: List[Dict[str, Any]]) -> None:
-    """Display results in a rich table."""
-    table = Table(show_header=True, header_style="bold magenta")
-    for key in results[0].keys():
-        table.add_column(key)
-
-    for result in results:
-        row = [str(value) for value in result.values()]
-        table.add_row(*row)
-
-    console.print(table)
-
 
 if __name__ == "__main__":
     cli()

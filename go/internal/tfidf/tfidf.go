@@ -12,6 +12,7 @@ import (
 
 	"golang.org/x/text/transform"
 	"golang.org/x/text/unicode/norm"
+	"golang.org/x/text/runes"
 )
 
 type TfIdfData struct {
@@ -20,9 +21,7 @@ type TfIdfData struct {
 }
 
 func stripAccents(input string) string {
-	t := transform.Chain(norm.NFD, transform.RemoveFunc(func(r rune) bool {
-		return unicode.Is(unicode.Mn, r)
-	}), norm.NFC)
+	t := transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC)
 	output, _, _ := transform.String(t, input)
 	return output
 }
@@ -42,20 +41,6 @@ func charNGrams(input string, ngramRange [2]int) []string {
 		}
 	}
 	return ngrams
-}
-
-func sublinearTermFrequency(term string, document string) float64 {
-	count := 0
-	ngrams := charNGrams(document, [2]int{1, 3})
-	for _, ngram := range ngrams {
-		if ngram == term {
-			count++
-		}
-	}
-	if count > 0 {
-		return 1 + math.Log(float64(count))
-	}
-	return 0
 }
 
 func CalculateTfIdfVector(rateName string, tfidfData *TfIdfData) []float32 {
