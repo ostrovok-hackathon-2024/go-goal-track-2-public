@@ -17,6 +17,7 @@ from tenacity import (
 )
 from io import StringIO
 import sys
+from io import IOBase
 
 from shared.config.config import load_settings
 from shared.models.registry import ModelRegistry
@@ -32,12 +33,12 @@ class PredictionError(Exception):
         super().__init__(self.message)
 
 
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=4, max=10),
-    retry=retry_if_exception_type(PredictionError),
-    reraise=True,
-)
+# @retry(
+#     stop=stop_after_attempt(3),
+#     wait=wait_exponential(multiplier=1, min=4, max=10),
+#     retry=retry_if_exception_type(PredictionError),
+#     reraise=True,
+# )
 def make_prediction(
     model_registry: ModelRegistry, inputs: List[str], categories: Optional[List[str]]
 ) -> List[Dict[str, Any]]:
@@ -51,9 +52,8 @@ def make_prediction(
 @click.option(
     "--input",
     "-i",
-    type=click.Path(exists=True),
     required=True,
-    help="Input file path (CSV) or '-' for stdin",
+    help="Input string or file path (CSV)",
 )
 @click.option(
     "--categories", "-c", multiple=True, help="Specify categories for prediction"
@@ -108,7 +108,12 @@ def cli(
         list(output_categories) if output_categories else None
     )
 
-    input_stream = sys.stdin if input == "-" else open(input, "r")
+    if os.path.isfile(input):
+        input_stream = open(input, "r")
+    else:
+        # Treat input as a string
+        input_stream = StringIO(input + "\n")
+
     output_stream = open(output, "w") if output else sys.stdout
 
     try:
@@ -122,7 +127,7 @@ def cli(
             output_categories_list,
         )
     finally:
-        if input != "-":
+        if isinstance(input_stream, IOBase):
             input_stream.close()
         if output:
             output_stream.close()
@@ -137,10 +142,11 @@ def process_data(
     verbose: bool,
     output_categories: Optional[List[str]],
 ):
-    reader = csv.DictReader(input_stream)
-    writer = None
-
-    inputs = [row["rate_name"] for row in reader]
+    if isinstance(input_stream, StringIO):
+        inputs = [input_stream.getvalue().strip()]
+    else:
+        reader = csv.DictReader(input_stream)
+        inputs = [row["rate_name"] for row in reader]
 
     try:
         if verbose:
@@ -153,10 +159,8 @@ def process_data(
                 for result in results
             ]
 
-        if not writer:
-            writer = _get_writer(output_stream, format, results[0].keys())
-
-        _write_results(writer, results, format)
+        writer = _get_writer(output_stream, format, results[0].keys())
+        _write_results(writer, results, format, output_stream)
 
         if verbose:
             console.print(
@@ -166,7 +170,8 @@ def process_data(
         if verbose:
             console.print(f"[red]Error during prediction: {e}[/red]")
         results = _get_partial_results(inputs)
-        _write_results(writer, results, format)
+        writer = _get_writer(output_stream, format, results[0].keys())
+        _write_results(writer, results, format, output_stream)
     except Exception as e:
         if verbose:
             console.print(f"[red]Unexpected error during prediction: {e}[/red]")
@@ -190,19 +195,17 @@ def _get_writer(output_stream, format: str, fieldnames):
         raise ValueError(f"Unsupported format: {format}")
 
 
-def _write_results(writer, results: List[Dict[str, Any]], format: str):
+def _write_results(writer, results: List[Dict[str, Any]], format: str, output_stream):
     if format == "json":
-        for result in results:
-            json.dump(result, sys.stdout, cls=writer)
-            sys.stdout.write("\n")
+        json.dump(results, output_stream, cls=writer, indent=2)
     elif format in ["csv", "tsv"]:
         writer.writerows(results)
     elif format == "yaml":
-        yaml.dump_all(results, sys.stdout, Dumper=writer)
+        yaml.dump_all(results, output_stream, Dumper=writer)
     elif format == "parquet":
         table = writer(pd.DataFrame(results))
-        pq.write_table(table, sys.stdout.buffer)
-    sys.stdout.flush()
+        pq.write_table(table, output_stream.buffer)
+    output_stream.flush()
 
 
 def _get_partial_results(inputs: List[str]) -> List[Dict[str, Any]]:

@@ -9,7 +9,11 @@ ENV POETRY_NO_INTERACTION=1 \
 
 WORKDIR /app
 
-COPY . .
+COPY artifacts ./artifacts
+
+COPY python ./python
+
+WORKDIR /app/python
 
 RUN poetry check
 # Install dependencies
