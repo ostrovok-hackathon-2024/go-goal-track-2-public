@@ -14,7 +14,7 @@
 
 Производится посредством средств языка `go` и `poetry` для решения на Python.
 
-### Установка библиотеки CatBoost для Go
+### Установка библиотеки CatBoost для Gog
 
 Для корректной работы моделей на Go необходимо иметь библиотеку `catboost` в системе.
 
@@ -26,6 +26,50 @@
 > 3. Or set path manual in source code `SetSharedLibraryPath` (see example below)
 >
 > For more information, see <https://catboost.ai/en/docs/concepts/c-plus-plus-api_dynamic-c-pluplus-wrapper>.
+
+### Docker Image
+
+#### Пример сборки Docker Image для решения на Go
+
+```bash
+cd go
+docker build -t cli-app-go -f cli.Dockerfile .
+```
+
+#### Пример сборки Docker Image для решения на Python
+
+```bash
+cd python
+docker build -t cli-app-python -f cli.Dockerfile .
+```
+
+#### Пример запуска Docker Image
+
+```bash
+docker run --rm cli-app-go -i "Example Rate Name" -c bedding -c quality
+```
+
+#### Пример запуска Docker Image для решения на Python
+
+```bash
+docker run --rm cli-app-python -i "Example Rate Name" -c bedding -c quality
+```
+
+#### Сборка и запуск Docker Image для серверного решения на Go
+
+```bash
+cd go
+docker build -t server-app-go -f api.Dockerfile .
+docker run --rm -p 8000:8000 server-app-go
+```
+
+#### Пример запуска Docker Image для серверного решения на Python
+
+```bash
+cd python
+docker build -t server-app-python -f server.Dockerfile .
+docker run --rm -p 8080:8080 server-app-python
+```
 
 ### Пример запуска
 
