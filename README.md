@@ -93,11 +93,11 @@ poetry run cli -i ../inputs/rates_short.csv --categories bedding --categories qu
 
 ### Код обучения моделей
 
-Код обучения моделей находится в директории `python/notebooks/data_analysis.ipynb`.
+Код обучения моделей находится в [файле](./python/notebooks/data_analysis.ipynb)
 
 ### Код использования моделей внутри Jupyter
 
-Код использования моделей внутри Jupyter находится в `python/notebooks/model_evaluation.ipynb`.
+Код использования моделей внутри Jupyter находится в [файле](./python/notebooks/model_evaluation.ipynb)
 
 ### Решение реализованное на Go
 
