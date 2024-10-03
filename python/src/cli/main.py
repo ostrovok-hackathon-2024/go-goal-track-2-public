@@ -160,7 +160,7 @@ def process_data(
 
 def _get_writer(output_stream, format: str, fieldnames):
     if format == "json":
-        return json.JSONEncoder(indent=2)
+        return None
     elif format in ["csv", "tsv"]:
         delimiter = "," if format == "csv" else "\t"
         writer = csv.DictWriter(
@@ -169,23 +169,23 @@ def _get_writer(output_stream, format: str, fieldnames):
         writer.writeheader()
         return writer
     elif format == "yaml":
-        return yaml.safe_dumper
+        return None
     elif format == "parquet":
-        return pa.Table.from_pandas
+        return None
     else:
         raise ValueError(f"Unsupported format: {format}")
 
 
 def _write_results(writer, results: List[Dict[str, Any]], format: str, output_stream):
     if format == "json":
-        json.dump(results, output_stream, cls=writer, indent=2)
+        json.dump(results, output_stream, indent=2)
     elif format in ["csv", "tsv"]:
         writer.writerows(results)
     elif format == "yaml":
-        yaml.dump_all(results, output_stream, Dumper=writer)
+        yaml.dump(results, output_stream)
     elif format == "parquet":
-        table = writer(pd.DataFrame(results))
-        pq.write_table(table, output_stream.buffer)
+        table = pa.Table.from_pandas(pd.DataFrame(results))
+        pq.write_table(table, output_stream.name)
     output_stream.flush()
 
 
@@ -194,6 +194,7 @@ def _get_partial_results(inputs: List[str]) -> List[Dict[str, Any]]:
         {"input": input, "predicted_category": "UNKNOWN", "confidence": 0.0}
         for input in inputs
     ]
+
 
 if __name__ == "__main__":
     cli()

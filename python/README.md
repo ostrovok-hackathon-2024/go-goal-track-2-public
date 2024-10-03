@@ -79,7 +79,7 @@ poetry run cli --config custom_config.yaml --input input.csv
 
 ## Output
 
-The tool will output the results in the specified format (CSV, JSON, TSV, or YAML), either to the specified output file or to the console if no output file is provided. The output will include the input string/rate name and the predicted categories.
+The tool will output the results in the specified format (CSV, JSON, TSV, YAML or Parquet), either to the specified output file or to the console if no output file is provided. The output will include the input string/rate name and the predicted categories.
 
 ## Models and Data
 
