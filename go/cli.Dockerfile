@@ -1,6 +1,10 @@
 FROM alpine:latest
 
-RUN apk add --no-cache gcc go=1.22.7-r0 libc6-compat musl-dev
+# Install build dependencies
+RUN apk add --no-cache gcc libc6-compat musl-dev
+
+# Install Go 1.23.1
+RUN apk add --no-cache go=1.23.1-r0 --repository=http://dl-cdn.alpinelinux.org/alpine/edge/community
 
 RUN apk --no-cache add ca-certificates
 
