@@ -23,6 +23,8 @@ categories:
   - "Category3"
 ```
 
+**Note! Order of categories in config will be used as output order!**
+
 Only specified categories will be used for prediction.
 
 ## Usage

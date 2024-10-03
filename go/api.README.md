@@ -52,10 +52,12 @@ This endpoint accepts a CSV file upload containing rate names and categories, pr
 - Form field: `file` (CSV file)
 
 The CSV file should have the following format:
+
 - First column: Rate names
 - Subsequent columns: Category names (used as headers)
 
 Example:
+
 ```
 Rate Name,Category1,Category2,Category3
 rate_name_1,,,
@@ -92,5 +94,7 @@ The API uses a configuration file (`config.yaml`) to set up various parameters, 
 - Model directories
 - Default categories
 - TF-IDF data file location
+
+**Note! Order of categories in config will be used as output order!**
 
 Ensure that the configuration file and all necessary model files are properly set up before running the API.
